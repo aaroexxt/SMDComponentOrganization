@@ -26,8 +26,10 @@ const canvasHeightPx = canvasHeight*ppi;
 
 
 const store = {
-	books: [],
-	components: []
+	boxes: [],
+	components: [],
+	componentTotal: -1,
+	boxTotal: -1
 }
 
 
@@ -244,6 +246,37 @@ const dirPicker = startDir => {
 	})
 }
 
+const loadStoreFile = path => {
+	return new Promise((resolve, reject) => {
+		store = JSON.parse(fs.readFileSync(path));
+		return resolve(); //we will never get here if the code above fails
+	})
+}
+
+const saveStoreFile = path => {
+	return new Promise((resolve, reject) => {
+		fs.writeFileSync(path, JSON.stringify(store));
+		return resolve(); //we will never get here if the code above fails
+	})
+}
+
+/*
+BOOK SELECTION
+*/
+
+const bookSelector = () => {
+	/*
+	We want to know dimensions, size of each package
+	1st ask how many sections (defined as areas of different types within storage)
+	Then ask book title, description
+	For each section:
+	1st ask pocket type (small medium large)
+	2nd ask width in pockets
+	3rd ask height in pockets
+	Then ask what components to assign
+	*/
+}
+
 /*
 COMPONENT SELECTION
 */
@@ -293,7 +326,7 @@ const componentSelector = () => {
 		};
 
 		//Setup choices
-		let componentChoices = ["Back"];
+		let componentChoices = ["Cancel"];
 		for (const prop in cDefs.types) {
 			componentChoices.push(cDefs.types[prop]);
 		};
@@ -318,6 +351,10 @@ const componentSelector = () => {
 			let keysCT = Object.keys(choiceType);
 			choiceType = choiceType[keysCT[0]];
 
+			if (choiceType == "Cancel") { //insta-return boii
+				return reject("cancelled");
+			}
+
 			inquirer.prompt({
 				name: "size",
 				message: "Pick Component Size",
@@ -327,42 +364,55 @@ const componentSelector = () => {
 				let keysSZ = Object.keys(choiceSize);
 				choiceSize = choiceSize[keysSZ[0]];
 
-				inquirer.prompt({
-					name: "qty",
-					message: "Input Quantity:",
-					type: "number"
-				}).then(inputQTY => {
-					let keysQTY = Object.keys(inputQTY);
-					inputQTY = inputQTY[keysQTY[0]];
 
-
-					inquirer.prompt({
-						name: "mf",
-						message: "Choose Manufacturer",
-						type: "list",
-						choices: manufacturerChoices	
-					}).then(choiceManuf => {
-						let keysMF = Object.keys(choiceManuf);
-						choiceManuf = choiceManuf[keysMF[0]];
-
-						if (choiceManuf == "Other") {
-							inquirer.prompt({
-								name: "mpn",
-								message: "Input Manufacturer:",
-								type: "input"
-							}).then(inputMPN => {
-								let keysMPN = Object.keys(inputMPN);
-								inputMPN = inputMPN[keysMPN[0]];
-
-								basicPromptsDone(choiceType, choiceSize, inputQTY, inputMPN);
-							})
-						} else {
-							basicPromptsDone(choiceType, choiceSize, inputQTY, choiceManuf);
-						}
+				if (choiceSize == cDefs.smdSizes.ICPACKAGES) { //IC packages need more type information
+					selectICPackage().then(icPkg => {
+						choiceSize = "SMD-"+icPkg;
+						sizeDone(choiceType, choiceSize);
 					})
-				})
+				} else {
+					sizeDone(choiceType, choiceSize);
+				}
+
+				
 			})
 		})
+
+		function sizeDone(choiceType, choiceSize) { //For some components, we have a more complex flow with size, so this function seperates it out
+			inquirer.prompt({
+				name: "qty",
+				message: "Input Quantity:",
+				type: "number"
+			}).then(inputQTY => {
+				let keysQTY = Object.keys(inputQTY);
+				inputQTY = inputQTY[keysQTY[0]];
+
+				inquirer.prompt({
+					name: "mf",
+					message: "Choose Manufacturer",
+					type: "list",
+					choices: manufacturerChoices	
+				}).then(choiceManuf => {
+					let keysMF = Object.keys(choiceManuf);
+					choiceManuf = choiceManuf[keysMF[0]];
+
+					if (choiceManuf == "Other") {
+						inquirer.prompt({
+							name: "mpn",
+							message: "Input Manufacturer:",
+							type: "input"
+						}).then(inputMPN => {
+							let keysMPN = Object.keys(inputMPN);
+							inputMPN = inputMPN[keysMPN[0]];
+
+							basicPromptsDone(choiceType, choiceSize, inputQTY, inputMPN);
+						})
+					} else {
+						basicPromptsDone(choiceType, choiceSize, inputQTY, choiceManuf);
+					}
+				})
+			})
+		}
 
 		function basicPromptsDone(type, size, qty, manuf) {
 			component.quantity = qty;
@@ -518,6 +568,86 @@ const componentSelector = () => {
 						})
 					})
 					break;
+				case cDefs.types.IC:
+					component.type = cDefs.types.IC;
+					inquirer.prompt({
+						name: "ident",
+						message: "Enter IC name or number (identifier):",
+						type: "input"
+					}).then(ident => {
+						ident = ident[Object.keys(ident)[0]];
+
+						inquirer.prompt({
+							name: "desc",
+							message: "Describe component:",
+							type: "input"
+						}).then(desc => {
+							desc = desc[Object.keys(desc)[0]];
+
+							component.additional.identifier = ident;
+							component.additional.description = desc;
+
+							return resolve(component);
+						});
+					})
+					break;
+				case cDefs.types.CRYSTAL:
+					component.type = cDefs.types.CRYSTAL;
+					inquirer.prompt({
+						name: "timUnit",
+						message: "Pick freqency unit",
+						type: "list",
+						choices: cDefs.units[cDefs.types.CRYSTAL].frequency
+					}).then(freqChoice => {
+						freqChoice = freqChoice[Object.keys(freqChoice)[0]];
+
+						inquirer.prompt({
+							name: "freq",
+							message: "Enter frequency (in"+freqChoice+"):",
+							type: "input"
+						}).then(freq => {
+							freq = freq[Object.keys(freq)[0]];
+
+							inquirer.prompt({
+								name: "lCap",
+								message: "Enter load capacitance (pF):",
+								type: "input"
+							}).then(lCap => {
+								lCap = lCap[Object.keys(lCap)[0]];
+
+								component.additional.frequency = freq;
+								component.additional.frequencyUnit = freqChoice;
+								component.additional.loadCapacitance = lCap;
+								component.additional.loadCapacitanceUnit = "pF";
+
+								return resolve(component);
+							})
+						})
+					})
+					break;
+				case cDefs.types.OTHER:
+					component.type = cDefs.types.OTHER;
+					inquirer.prompt({
+						name: "ident",
+						message: "Enter component name or number (identifier):",
+						type: "input"
+					}).then(ident => {
+						ident = ident[Object.keys(ident)[0]];
+
+						inquirer.prompt({
+							name: "desc",
+							message: "Describe component:",
+							type: "input"
+						}).then(desc => {
+							desc = desc[Object.keys(desc)[0]];
+
+							component.additional.identifier = ident;
+							component.additional.description = desc;
+
+							return resolve(component);
+						});
+					})
+					break;
 				default:
 					return reject("Something went wrong :(");
 					break;
@@ -527,36 +657,110 @@ const componentSelector = () => {
 	});
 }
 
+const selectICPackage = () => {
+	return new Promise((resolve, reject) => {
+		let outerChoices = [];
+		for (const prop in cDefs.ICPackages) {
+			outerChoices.push(prop);
+		}
+		function outer() {
+			inquirer.prompt({
+				name: "outTyp",
+				message: "Select package type (general)",
+				type: "list",
+				choices: outerChoices
+			}).then(c => {
+				c = c[Object.keys(c)[0]];
+				inner(c);
+			})
+		}
+		function inner(sel) {
+			let innerChoices = ["Back"];
+			cDefs.ICPackages[sel].forEach(p => {
+				innerChoices.push(p);
+			})
+			inquirer.prompt({
+				name: "inTyp",
+				message: "Select specific type",
+				type: "list",
+				choices: innerChoices
+			}).then(c => {
+				c = c[Object.keys(c)[0]];
+				if (c.toLowerCase().indexOf("back") > -1) {
+					outer();
+				} else {
+					return resolve(c);
+				}
+			})
+		}
+
+		outer();
+	})
+}
+
 function fixFloatRounding(number) {
     return parseFloat(parseFloat(number).toPrecision(12)); //hey it's jank but it works
 }
 
-componentSelector().then(component => {
-	console.log("\n\n\n",component);
-})
-
 const componentCompare = (a, b) => {
-	return new Promise((resolve, reject) => {
-		if (a.type != b.type) return reject();
-		if (a.size != b.size) return reject();
+	if (a.type != b.type) return false;
+	if (a.size != b.size) return false;
 
-		if (a.manufacturer.toLowerCase().indexOf("unknown") < 0 && b.manufacturer.toLowerCase().indexOf("unknown"))
-			if (a.manufacturer.toLowerCase() != b.manufacturer.toLowerCase()) return reject();
+	if (a.manufacturer.toLowerCase().indexOf("unknown") < 0 && b.manufacturer.toLowerCase().indexOf("unknown")) {
+		if (a.manufacturer.toLowerCase() != b.manufacturer.toLowerCase()) return false;
+	}
+	//Qty can slide
 
-		switch (a.type) { //Now compare the "additional" fields
-			case cDefs.types.RESISTOR:
-				if (a.tolerance != b.tolerance) return reject();
-				if (a.normalizedValue != b.normalizedValue) return reject();
+	let aAdd = a.additional;
+	let bAdd = b.additional;
+	switch (a.type) { //Now compare the "additional" fields
+		case cDefs.types.RESISTOR:
+			if (aAdd.tolerance != bAdd.tolerance) return false;
+			if (aAdd.normalizedValue != bAdd.normalizedValue) return false;
+			break;
+		case cDefs.types.CAPACITOR:
+			if (aAdd.normalizedTolerance != bAdd.normalizedTolerance) return false;
+			if (aAdd.normalizedValue != bAdd.normalizedValue) return false;
+			if (aAdd.maxVoltage != bAdd.maxVoltage) return false;
+			break;
+		case cDefs.types.OTHER:
+		case cDefs.types.IC:
+			if (aAdd.identifier != bAdd.identifier) return false;
+			//Description can slide
+			break;
+		case cDefs.types.CRYSTAL:
+			if (aAdd.frequency != bAdd.frequency) return false;
+			if (aAdd.frequencyUnit != bAdd.frequencyUnit) return false;
+			if (aAdd.loadCapacitance != bAdd.loadCapacitance) return false;
+			break;
+	}
+
+	return true; //If you get here, wowowow congrats there's truly a duplicate component
+}
+
+const addComponent = component => {
+	if (store.components.length == 0) { //nothing to compare so uhhh... return
+		store.components.push(component);
+		store.componentTotal++;
+	} else {
+		let matchFound = false;
+		let matchIdx = 0;
+		for (let i=0; i<store.components.length; i++) {
+			if (componentCompare(store.components[i], component)) {
+				matchFound = true;
+				matchIdx = i;
 				break;
-			case cDefs.types.CAPACITOR:
-				if (a.normalizedTolerance != b.normalizedTolerance) return reject();
-				if (a.normalizedValue != b.normalizedValue) return reject();
-				if (a.maxVoltage != b.maxVoltage) return reject();
-				break;
+			}
 		}
 
-		return resolve(); //If you get here, wowowow congrats there's truly a duplicate component
-	})
+		if (matchFound) { //if same just add quantity
+			store.components[matchIdx].quantity += component.quantity;
+		} else { //if different just add it into the list
+			store.components.push(component);
+			store.componentTotal++;
+		}
+	}
+	return true;
 }
 
 /*
@@ -564,9 +768,9 @@ USER INPUT
 */
 
 const main = () => {
-	const mChoices = ["Load File", "Edit Currently Loaded File", "Export Currently Loaded File"];
+	const mChoices = ["Load Component Book", "New Component Book"];
 	inquirer.prompt({
-		name: "Choose an action",
+		name: "Choose an action:",
 		type: "list",
 		choices: mChoices
 	}).then(choice => {
@@ -576,17 +780,162 @@ const main = () => {
 		if (choice == mChoices[0]) {
 			dirPicker(".").then(dir => {
 				getFilesInDir(dir).then(files => {
+					let validFiles = [];
 					for (let i=0; i<files.length; i++) {
+						if (files[i].toLowerCase().indexOf(".json") > -1) {
+							validFiles.push(files[i])
+						}
+					}
 
+					if (validFiles.length == 0) {
+						console.log("No valid files found in that directory!");
+						main();
+					} else if (validFiles.length == 1) {
+						loadStoreFile(validFiles[0]).then(() => {
+							afterMain();
+						})
+					} else {
+						inquirer.prompt({
+							name: "fil",
+							message: "Select file:",
+							type: "list",
+							choices: validFiles
+						}).then(fil => {
+							loadStoreFile(fil[Object.keys(fil)[0]]).then(() => { //Do NOT ask about this one liner or my sanity goes riprooni
+								afterMain();
+							})
+						})
 					}
 				})
 			})
-			
+		} else {
+			store.componentTotal = 0;
+			store.boxTotal = 0;
+			afterMain();
 		}
 	})
 }
 
-//main();
+const afterMain = () => {
+	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Storage Info", "Save Data File", "Export Labels", "Exit"];
+	inquirer.prompt({
+		name: "mC",
+		message: "Choose an action:",
+		type: "list",
+		choices: mChoices
+	}).then(choice => {
+		choice = choice[Object.keys(choice)[0]];
+
+		if (choice == mChoices[0]) {
+			componentSelector().then(component => {
+				addComponent(component); //Actually add it to store
+				afterMain();
+			}).catch(() => {
+				afterMain();
+			});
+		} else if (choice == mChoices[1]) {
+			inquirer.prompt({
+				name: "cAmnt",
+				message: "Enter amount of components to add:",
+				type: "number"
+			}).then(amnt => {
+				amnt = Number(amnt[Object.keys(amnt)[0]]);
+
+				let addN = n => {
+					console.log("Component "+(n+1)+" of "+amnt);
+					componentSelector().then(component => {
+						addComponent(component); //Actually add it to store
+							
+						if (n >= amnt-1) {
+							afterMain(); //wee we done
+						} else {
+							addN(n+1); //recursion gang
+						}
+					}).catch(() => {
+						afterMain();
+					})
+				}
+				addN(0);
+			})
+		} else if (choice == mChoices[2]) {
+			console.log("\n~~~~ Storage Info ~~~");
+			console.log("Total Component Count: "+store.componentTotal);
+			console.log("~~~~~");
+			console.log("Component breakdown:\nType\t\tEntryCount\tComponentCount");
+			let counts = [];
+			let typeKeys = Object.keys(cDefs.types);
+			for (let i=0; i<typeKeys.length; i++) { //init the array
+				counts[i] = [cDefs.types[typeKeys[i]], 0, 0];
+			}
+
+			for (let i=0; i<store.components.length; i++) {
+				for (let j=0; j<typeKeys.length; j++) {
+					if (cDefs.types[typeKeys[j]] == store.components[i].type) {
+						counts[j][1]++; //add 1 to entry count
+						counts[j][2] += store.components[i].quantity; //add actual component count
+					}
+				}
+			}
+
+			for (let i=0; i<counts.length; i++) {
+				console.log(counts[i][0]+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]);
+			}
+			console.log("\n");
+			console.log("Total Box Count: "+store.boxTotal);
+			console.log("~~~~~\nBox Breakdown:");
+
+			afterMain(); //return to main
+		} else if (choice == mChoices[3]) {
+			console.log("Save to directory:");
+			dirPicker(".").then(dir => {
+				getFilesInDir(dir).then(files => {
+					let fileExists = false;
+					for (let i=0; i<files.length; i++) {
+						if (files[i].indexOf("storage.json") > -1) {
+							fileExists = true;
+						}
+					}
+
+					let storePath = path.join(dir, "storage.json");
+					console.log(storePath);
+					if (fileExists) {
+						inquirer.prompt({
+							type: "confirm",
+							name: "overw",
+							message: "Overwrite file 'storage.json'?"
+						}).then(ovw => {
+							ovw = ovw[Object.keys(ovw)[0]];
+
+							if (ovw) {
+								saveStoreFile(storePath).then(() => {
+									console.log("File saved successfully.");
+									afterMain();
+								}).catch(e => {
+									console.error("There was an error saving the file: "+e);
+									afterMain();
+								})
+							} else { //j return to main if no overwrite
+								afterMain();
+							}
+						})
+					} else {
+						saveStoreFile(storePath).then(() => {
+							console.log("File saved successfully.");
+							afterMain();
+						}).catch(e => {
+							console.error("There was an error saving the file: "+e);
+							afterMain();
+						})
+					}
+				});
+			});
+		}
+	})
+}
+
+
+
+main(); //let's get this show on the road shall we?
 
 
 

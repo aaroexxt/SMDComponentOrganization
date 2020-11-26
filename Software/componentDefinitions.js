@@ -1,28 +1,75 @@
 //Component types
 const componentTypes = {
-	RESISTOR: "Resistor",
-	CAPACITOR: "Capacitor",
+	RESISTOR: "Resistor", //done
+	CAPACITOR: "Capacitor", //done
 	TRANSISTOR: "Transistor",
+	DIODE: "Diode",
+	INDUCTOR: "Inductor",
+	CRYSTAL: "Crystal", //done
 	LED: "LED",
-	IC: "IC",
-	OTHER: "Other"
+	IC: "IC", //done
+	MECHANICAL: "Mechanical",
+	OTHER: "Other" //done
 };
 const SMDpackageSizes = {
 	S0805: "0805",
 	S0603: "0603",
 	S0402: "0402",
+	ICPACKAGES: "SMDPackages",
 	DISCRETE: "Discrete",
 	S1206: "1206",
 	S0201: "0201"
 };
-const discreteICPackages = {
-	"ThroughHole": [
+
+const ICPackages = {
+	"ThroughHole (DIP, SIP, etc)": [
 		"SIP",
 		"DIP",
 		"QIP",
 		"ZIP"
 	],
-	"ChipCarrier": [
+	"Transistor (TO-252 - DPAK, TO-92, SOT-143, etc)": [
+		"TO-252 (DPAK)",
+		"TO-263 (DDPAK)",
+		"LL-34",
+		"LL-41",
+		"SOT-23",
+		"SOT-89",
+		"SOD-123",
+		"SOD-123FL",
+		"SMAF",
+		"SMBF",
+		"SMA",
+		"SMB",
+		"SMC",
+		"TO-277",
+		"DO-214AC/AB/AA",
+		"SOD-323",
+		"SOD-523",
+		"SOD-723",
+		"SOT-223",
+		"SOT-363",
+		"SOT-23-6",
+		"SOP4"
+	],
+	"Diode/Sensor (TO-220, etc)": [
+		"R-1",
+		"DO-41",
+		"DO-15",
+		"DO-27",
+		"R-6",
+		"DO-35",
+		"DO-41",
+		"TO-220 (AB, AC)",
+		"ITO-220 (AB, AC)",
+		"TO-247",
+		"TO-126",
+		"TO-92",
+		"TO-251",
+		"DIP-4",
+		"SEP"
+	],
+	"ChipCarrier (BCC, CLCC, etc)": [
 		"BCC",
 		"CLCC",
 		"LCC",
@@ -30,7 +77,7 @@ const discreteICPackages = {
 		"DLCC",
 		"PLCC"
 	],
-	"FlatPack": [
+	"FlatPack (TQFP, VQFN, etc)": [
 		"CFP",
 		"CQFP",
 		"BQFP",
@@ -51,7 +98,7 @@ const discreteICPackages = {
 		"UQFN",
 		"OFDN"
 	],
-	"SmallOutline": [
+	"SmallOutline (SOP, SOIC, etc)": [
 		"SOP",
 		"CSOP",
 		"DSOP",
@@ -74,7 +121,7 @@ const discreteICPackages = {
 		"WSON",
 		"USON"
 	],
-	"ChipScale": [
+	"ChipScale (CSP, TCSP, etc)": [
 		"CSP",
 		"TCSP",
 		"TDSP",
@@ -85,7 +132,7 @@ const discreteICPackages = {
 		"TAB",
 		"COG"
 	],
-	"BallGridArray": [
+	"BallGridArray (FBGA, LBGA, etc)": [
 		"FBGA",
 		"LBGA",
 		"TEPBGA",
@@ -133,14 +180,22 @@ const capacitorUnits = {
 	]
 }
 
+const crystalUnits = {
+	frequency: [
+		"MHz",
+		"KHz"
+	]
+}
+
 var mExports = {
 	types: componentTypes,
 	smdSizes: SMDpackageSizes,
-	ICPackages: discreteICPackages,
+	ICPackages: ICPackages,
 	manufacturers: manufacturers,
 	units: {}
 }
 mExports.units[componentTypes.RESISTOR] = resistorUnits;
 mExports.units[componentTypes.CAPACITOR] = capacitorUnits;
+mExports.units[componentTypes.CRYSTAL] = crystalUnits;
 
 module.exports = mExports;
