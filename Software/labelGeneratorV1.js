@@ -1,6 +1,8 @@
 //labelGeneratorV1.js
 //Written by Aaron Becker later then he should be awake lol
 
+//Todos: when adding component, if already assigned tell where
+
 //libs
 const fs = require('fs');
 const path = require('path');
@@ -11,7 +13,7 @@ const pngString = require('console-png');
 const jimp = require('jimp');
 
 const cDefs = require("./componentDefinitions.js");
-
+const bDefs = require("./boxDefinitions.js");
 
 //constants
 const canvasWidth = 4; //in
@@ -22,10 +24,7 @@ const canvasWidthPx = canvasWidth*ppi;
 const canvasHeightPx = canvasHeight*ppi;
 
 
-
-
-
-const store = {
+var store = {
 	boxes: [],
 	components: [],
 	componentTotal: -1,
@@ -205,6 +204,58 @@ const getPrimaryPrinter = () => {
 }
 
 /*
+This code doesn't work :(
+The printer I'm using required things in a very weird format and doesn't like the generated ones here
+So I'll give it up for now
+const cp = require('child_process');
+
+//Hey let's print stuff!
+const printFiles = (fileList, printerName) => {
+	return new Promise((resolve, reject) => {
+		function printN(n) {
+			let file = fileList[n];
+			console.log("Now printing: "+file);
+			convertImageToEMF(file).then(buf => {
+				printer.printDirect({
+					data: buf,
+					type: "TEXT",
+					printer: printerName,
+					success: function(jobID) {
+						console.log("sent to printer w ID: "+jobID);
+						if (n < fileList.length-1) {
+							setTimeout(() => {
+								console.log("Printing next page...");
+								n++;
+								printN(n);
+							},2000);
+						} else {
+							return resolve();
+						}
+					}, error: function(err) {
+						console.log("Error: "+err);
+						return reject(err);
+					}
+				})
+				
+			})
+			console.log(printer.getSupportedPrintFormats(printerName));
+		}
+
+		if (fileList.length > 0) {
+			printN(0);
+		} else {
+			return resolve();
+		}
+	});
+}
+
+
+getPrimaryPrinter().then(printer => {
+	printFiles(["./batch11-22-2020/testPrint.png"], printer);
+})
+*/
+
+/*
 FILE HANDLING
 */
 
@@ -261,10 +312,10 @@ const saveStoreFile = path => {
 }
 
 /*
-BOOK SELECTION
+BOX SELECTION
 */
 
-const bookSelector = () => {
+const boxSelector = () => {
 	/*
 	We want to know dimensions, size of each package
 	1st ask how many sections (defined as areas of different types within storage)
@@ -275,6 +326,81 @@ const bookSelector = () => {
 	3rd ask height in pockets
 	Then ask what components to assign
 	*/
+
+	return new Promise((resolve, reject) => {
+		var box = {
+			sections: []
+		}
+		inquirer.prompt({
+			name: "title",
+			message: "Enter box identifier/title (what will be printed on top):",
+			type: "input"
+		}).then(bTitle => {
+			bTitle = bTitle[Object.keys(bTitle)[0]];
+
+			inquirer.prompt({
+				name: "description",
+				message: "Enter box description (will be printed):",
+				type: "input"
+			}).then(bDesc => {
+				bDesc = bDesc[Object.keys(bDesc)[0]];
+
+				box.title = bTitle;
+				box.description = bDesc;
+				box.uuid = generateUUID();
+
+				inquirer.prompt({
+					name: "nSec",
+					message: "Enter number of sections in box:",
+					type: "number"
+				}).then(bSecN => {
+					bSecN = bSecN[Object.keys(bSecN)[0]];
+
+					let fillSection = n => {
+						console.log("Section "+(n+1)+" of "+bSecN);
+						var section = {};
+
+						inquirer.prompt({
+							name: "sType",
+							message: "Pick a section type:",
+							type: "list",
+							choices: bDefs.sectionTypes
+						}).then(sType => {
+							sType = sType[Object.keys(sType)[0]];
+							section.type = sType;
+
+							inquirer.prompt({
+								name: "sWidth",
+								message: "Enter section width (in pockets):",
+								type: "number"
+							}).then(sWidth => {
+								sWidth = sWidth[Object.keys(sWidth)[0]];
+
+								inquirer.prompt({
+									name: "sHeight",
+									message: "Enter section height (in pockets):",
+									type: "number"
+								}).then(sHeight => {
+									sHeight = sHeight[Object.keys(sHeight)[0]];
+
+									section.width = sWidth;
+									section.height = sHeight;
+
+									box.sections.push(section); //Add section to box
+									if (n >= bSecN-1) {
+										return resolve(box); //Box done
+									} else {
+										fillSection(n+1);
+									}
+								})
+							})
+						})
+					}
+					fillSection(0);
+				})
+			})
+		})
+	})
 }
 
 /*
@@ -418,6 +544,11 @@ const componentSelector = () => {
 			component.quantity = qty;
 			component.size = size;
 			component.manufacturer = manuf;
+			component.uuid = generateUUID();
+			component.assignment = {
+				assigned: false,
+				box: undefined
+			}
 
 			//Now we ask for additional information
 			switch (type) {
@@ -702,6 +833,13 @@ function fixFloatRounding(number) {
     return parseFloat(parseFloat(number).toPrecision(12)); //hey it's jank but it works
 }
 
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 const componentCompare = (a, b) => {
 	if (a.type != b.type) return false;
 	if (a.size != b.size) return false;
@@ -755,6 +893,9 @@ const addComponent = component => {
 
 		if (matchFound) { //if same just add quantity
 			store.components[matchIdx].quantity += component.quantity;
+			if (store.components[matchIdx].assignment.assigned) {
+				console.log("UHHH COMPONENT IS ASSIGNED ALREADY TELL USER WHERE");
+			}
 		} else { //if different just add it into the list
 			store.components.push(component);
 			store.componentTotal++;
@@ -792,6 +933,7 @@ const main = () => {
 						main();
 					} else if (validFiles.length == 1) {
 						loadStoreFile(validFiles[0]).then(() => {
+							console.log("Loaded "+store.componentTotal+" components and "+store.boxTotal+" boxes successfully.");
 							afterMain();
 						})
 					} else {
@@ -802,6 +944,7 @@ const main = () => {
 							choices: validFiles
 						}).then(fil => {
 							loadStoreFile(fil[Object.keys(fil)[0]]).then(() => { //Do NOT ask about this one liner or my sanity goes riprooni
+								console.log("Loaded "+store.componentTotal+" components and "+store.boxTotal+" boxes successfully.");
 								afterMain();
 							})
 						})
@@ -817,7 +960,7 @@ const main = () => {
 }
 
 const afterMain = () => {
-	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Storage Info", "Save Data File", "Export Labels", "Exit"];
+	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Storage Info", "Save Data File", "Export Labels", "Exit"];
 	inquirer.prompt({
 		name: "mC",
 		message: "Choose an action:",
@@ -847,6 +990,7 @@ const afterMain = () => {
 						addComponent(component); //Actually add it to store
 							
 						if (n >= amnt-1) {
+							console.log("Added "+amnt+" components successfully");
 							afterMain(); //wee we done
 						} else {
 							addN(n+1); //recursion gang
@@ -858,10 +1002,42 @@ const afterMain = () => {
 				addN(0);
 			})
 		} else if (choice == mChoices[2]) {
+			boxSelector().then(box => {
+				store.boxes.push(box); //add box!
+				store.boxTotal++;
+				console.log("Added box successfully");
+				afterMain();
+			})
+		} else if (choice == mChoices[3]) {
+			inquirer.prompt({
+				name: "cAmnt",
+				message: "Enter amount of boxes to add:",
+				type: "number"
+			}).then(amnt => {
+				amnt = Number(amnt[Object.keys(amnt)[0]]);
+
+				let addN = n => {
+					console.log("Box "+(n+1)+" of "+amnt);
+					boxSelector().then(box => {
+						store.boxes.push(box); //add box!
+						store.boxTotal++;
+							
+						if (n >= amnt-1) {
+							console.log("Added "+amnt+" boxes successfully");
+							afterMain(); //wee we done
+						} else {
+							addN(n+1); //recursion gang
+						}
+					}).catch(() => {
+						afterMain();
+					})
+				}
+				addN(0);
+			})
+		} else if (choice == mChoices[4]) {
 			console.log("\n~~~~ Storage Info ~~~");
 			console.log("Total Component Count: "+store.componentTotal);
-			console.log("~~~~~");
-			console.log("Component breakdown:\nType\t\tEntryCount\tComponentCount");
+			console.log("~~~~~\nComponent breakdown:\nType\t\tEntryCount\tComponentCount");
 			let counts = [];
 			let typeKeys = Object.keys(cDefs.types);
 			for (let i=0; i<typeKeys.length; i++) { //init the array
@@ -878,14 +1054,27 @@ const afterMain = () => {
 			}
 
 			for (let i=0; i<counts.length; i++) {
-				console.log(counts[i][0]+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]);
+				console.log(counts[i][0]+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]); //another funky fresh oneliner from yours truly
 			}
 			console.log("\n");
 			console.log("Total Box Count: "+store.boxTotal);
-			console.log("~~~~~\nBox Breakdown:");
+			if (store.boxTotal > 0) {
+				console.log("~~~~~\nBox Breakdown:");
+				//name sectionCount
+				//	sectionType: width=w, height=h
+
+				for (let i=0; i<store.boxes.length; i++) {
+					let box = store.boxes[i];
+					console.log("Box '"+box.title+"' has "+box.sections.length+" sections");
+					for (let j=0; j<box.sections.length; j++) {
+						console.log("\t"+box.sections[i].type+": W="+box.sections[i].width+", H="+box.sections[i].height);
+					}
+				}
+			}
+			console.log("\n~~~~ End Storage Info ~~~~");
 
 			afterMain(); //return to main
-		} else if (choice == mChoices[3]) {
+		} else if (choice == mChoices[5]) {
 			console.log("Save to directory:");
 			dirPicker(".").then(dir => {
 				getFilesInDir(dir).then(files => {
@@ -938,53 +1127,9 @@ const afterMain = () => {
 main(); //let's get this show on the road shall we?
 
 
+/*
+Generating printable pages:
 
-
-
-
-// const cp = require('child_process');
-
-// //Hey let's print stuff!
-// const printFiles = (fileList, printerName) => {
-// 	return new Promise((resolve, reject) => {
-// 		function printN(n) {
-// 			let file = fileList[n];
-// 			console.log("Now printing: "+file);
-// 			convertImageToEMF(file).then(buf => {
-// 				printer.printDirect({
-// 					data: buf,
-// 					type: "TEXT",
-// 					printer: printerName,
-// 					success: function(jobID) {
-// 						console.log("sent to printer w ID: "+jobID);
-// 						if (n < fileList.length-1) {
-// 							setTimeout(() => {
-// 								console.log("Printing next page...");
-// 								n++;
-// 								printN(n);
-// 							},2000);
-// 						} else {
-// 							return resolve();
-// 						}
-// 					}, error: function(err) {
-// 						console.log("Error: "+err);
-// 						return reject(err);
-// 					}
-// 				})
-				
-// 			})
-// 			console.log(printer.getSupportedPrintFormats(printerName));
-// 		}
-
-// 		if (fileList.length > 0) {
-// 			printN(0);
-// 		} else {
-// 			return resolve();
-// 		}
-// 	});
-// }
-
-
-// getPrimaryPrinter().then(printer => {
-// 	printFiles(["./batch11-22-2020/testPrint.png"], printer);
-// })
+start with blank canvas of correct size
+print box labels as entire sheet
+*/
