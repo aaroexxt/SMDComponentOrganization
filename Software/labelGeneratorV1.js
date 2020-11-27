@@ -2,6 +2,15 @@
 //Written by Aaron Becker later then he should be awake lol
 
 //Todos: when adding component, if already assigned tell where
+//Lookup function with box visualization, highlight in red where component would go
+//Box section code example - B1-S1-1-2
+
+/*
+Generating printable pages:
+
+start with blank canvas of correct size
+print box labels as entire sheet
+*/
 
 //libs
 const fs = require('fs');
@@ -57,6 +66,12 @@ const exportCanvas = async function(store) {
 
 	fs.writeFileSync('./test.png', buffer);
 
+}
+
+const exportImages = dir => { //Will export images from store
+	return new Promise((resolve, reject) => {
+		
+	})
 }
 
 /*
@@ -386,6 +401,16 @@ const boxSelector = () => {
 									section.width = sWidth;
 									section.height = sHeight;
 
+									let row = [];
+									for (let i=0; i<sWidth; i++) {
+										row.push("");
+									}
+
+									section.assignments = [];
+									for (let i=0; i<sHeight; i++) {
+										section.assignments.push(row); //no need to recalculate it every time
+									}
+
 									box.sections.push(section); //Add section to box
 									if (n >= bSecN-1) {
 										return resolve(box); //Box done
@@ -545,10 +570,7 @@ const componentSelector = () => {
 			component.size = size;
 			component.manufacturer = manuf;
 			component.uuid = generateUUID();
-			component.assignment = {
-				assigned: false,
-				box: undefined
-			}
+			component.assigned = false;
 
 			//Now we ask for additional information
 			switch (type) {
@@ -893,7 +915,7 @@ const addComponent = component => {
 
 		if (matchFound) { //if same just add quantity
 			store.components[matchIdx].quantity += component.quantity;
-			if (store.components[matchIdx].assignment.assigned) {
+			if (store.components[matchIdx].assigned) {
 				console.log("UHHH COMPONENT IS ASSIGNED ALREADY TELL USER WHERE");
 			}
 		} else { //if different just add it into the list
@@ -903,6 +925,280 @@ const addComponent = component => {
 	}
 	return true;
 }
+
+const assignComponents = () => {
+	return new Promise((resolve, reject) => {
+		let cAssign = [];
+		for (let i=0; i<store.components.length; i++) {
+			if (!store.components[i].assigned) {
+				cAssign.push([i, store.components[i]]); //idx, component
+			}
+		}
+
+		if (cAssign.length == 0) {
+			console.log("No components left to assign!");
+			return resolve();
+		} else {
+			console.log(cAssign.length+" components left to assign");
+
+			let assignN = n => {
+				console.log("Assigning component "+(n+1)+" of "+cAssign.length);
+				printComponent(store.components[cAssign[n][0]]);
+
+				let availableBoxes = []; //box idx
+				for (let i=0; i<store.boxes.length; i++) {
+					let filled = true;
+					let box = store.boxes[i];
+					let space = getSpaceInBox(box);
+					if (space > 0) {
+						availableBoxes.push([i, space]);
+					}
+				}
+				console.log("Boxes available: "+availableBoxes.length);
+
+				let availBoxTitles = [];
+				for (let i=0; i<availableBoxes.length; i++) {
+					availBoxTitles.push("Name: '"+store.boxes[availableBoxes[i][0]].title+"', freeSpace="+availableBoxes[i][1]);
+				}
+
+				inquirer.prompt({
+					name: "bSel",
+					message: "Select a box for component",
+					type: "list",
+					choices: availBoxTitles
+				}).then(bSel => {
+					bSel = bSel[Object.keys(bSel)[0]];
+					let bIdx = 0; //global store box id
+					for (let i=0; i<store.boxes.length; i++) {
+						if (bSel.indexOf(store.boxes[i].title) > -1) {
+							bIdx = i;
+							break;
+						}
+					}
+					let box = store.boxes[bIdx];
+
+					printBox(box);
+
+					let assignComponent = () => {
+						let methodChoices = ["AutoAssign", "Manually"];
+						inquirer.prompt({
+							name: "aSel",
+							message: "Pick assignment method",
+							type: "list",
+							choices: methodChoices
+						}).then(method => {
+							method = method[Object.keys(method)[0]];
+
+							if (method == methodChoices[0]) { //AutoAssign gang rise up
+								let assigned = false;
+								for (let i=0; i<box.sections.length; i++) {
+									for (let j=0; j<box.sections[i].assignments.length; j++) {
+										for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+											/*
+											Steps to assign box UUIDs
+
+											1) Put component UUID in box assignment field
+											2) Set "assigned" flag in component
+											*/
+											if (box.sections[i].assignments[j][b] == "") {
+												store.boxes[bIdx].sections[i].assignments[j][b] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
+												store.components[cAssign[n][0]].assigned = true;
+												console.log("AutoAssigned to row="+(j+1)+", col="+(b+1));
+
+												assigned = true;
+												break;
+											}
+										}
+										if (assigned) break;
+									}
+									if (assigned) break;
+								}
+								if (n >= cAssign.length-1) {
+									return resolve();
+								} else {
+									assignN(n+1);
+								}
+							} else if (method == methodChoices[1]) {
+								let sectionOptions = [];
+								for (let i=0; i<box.sections.length; i++) {
+									sectionOptions.push("Section "+(i+1)+" of type '"+box.sections[i].type+"'");
+								}
+								inquirer.prompt({
+									name: "bSec",
+									message: "Pick a section to put component in",
+									type: "list",
+									choices: sectionOptions
+								}).then(sec => {
+									sec = sec[Object.keys(sec)[0]];
+
+									let secIdx = sectionOptions.indexOf(sec);
+
+									let section = box.sections[secIdx];
+									
+									let rowOptions = [];
+									let columnOptions = [];
+									for (let i=0; i<section.height; i++) {
+										rowOptions.push("Row "+(i+1));
+									}
+									for (let i=0; i<section.width; i++) {
+										columnOptions.push("Column "+(i+1));
+									}
+									inquirer.prompt({
+										name: "bRow",
+										message: "Pick a row",
+										type: "list",
+										choices: rowOptions
+									}).then(row => {
+										inquirer.prompt({
+											name: "bCol",
+											message: "Pick a column",
+											type: "list",
+											choices: columnOptions
+										}).then(col => {
+											row = row[Object.keys(row)[0]];
+											col = col[Object.keys(col)[0]];
+
+											let rowIdx = rowOptions.indexOf(row);
+											let colIdx = columnOptions.indexOf(col);
+
+											if (section.assignments[rowIdx][colIdx] == "") { //it's empty so we gucci
+												store.boxes[bIdx].sections[secIdx].assignments[rowIdx][colIdx] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
+												store.components[cAssign[n][0]].assigned = true;
+
+												if (n >= cAssign.length-1) {
+													return resolve();
+												} else {
+													assignN(n+1);
+												}
+											} else { //spot filled
+												console.log("That spot is currently filled. Try again");
+												assignComponent();
+											}
+										})
+									})
+								})
+							}
+						})
+
+					}
+					assignComponent();
+				})
+			}
+			assignN(0);
+		}
+	})
+}
+
+const printComponent = component => {
+	let info;
+	switch(component.type) {
+		case cDefs.types.RESISTOR:
+		case cDefs.types.CAPACITOR:
+			info = "value "+component.additional.value+component.additional.valueUnit;
+			break;
+		case cDefs.types.IC:
+		case cDefs.types.OTHER:
+			info = "identifier "+component.additional.identifier;
+			break;
+		case cDefs.types.CRYSTAL:
+			info = "frequency "+component.additional.frequency+component.additional.frequencyUnit;
+			break;
+		default:
+			info = "unknown info";
+			break;
+	}
+	console.log("Component: "+component.type+" with "+info);
+	return;
+}
+
+const printBox = box => {
+	/*
+	Ex visualization
+	Section Type: Small
+	|-------------------------------|
+	|0pf	| 1pf	| 2pf	| EMPTY	|
+	|-------|-------|-------|-------|
+
+
+	*/
+	for (let i=0; i<box.sections.length; i++) {
+		let section = box.sections[i];
+
+		console.log("Section Type: "+section.type);
+		let am = section.assignments;
+
+		let divider = "";
+		for (let j=0; j<section.width*8; j++) {
+			divider+=(j == 0)?"|" : (j==(section.width*8-1)) ? "-|" : "-";
+		}
+
+		for (let j=0; j<am.length; j++) { //for each row
+			console.log(divider); //print divider
+
+			let printStr = "|";
+			for (let b=0; b<am[j].length; b++) {
+				if (am[j][b] == "") {
+					printStr += " EMPTY\t|";
+				} else {
+					let component = componentLookup(am[j][b]); //get component info
+
+					let info = "";
+					switch(component.type) {
+						case cDefs.types.RESISTOR:
+						case cDefs.types.CAPACITOR:
+							info = component.additional.value+component.additional.valueUnit;
+							break;
+						case cDefs.types.IC:
+						case cDefs.types.OTHER:
+							info = component.additional.identifier;
+							break;
+						case cDefs.types.CRYSTAL:
+							info = component.additional.frequency+component.additional.frequencyUnit;
+							break;
+						default:
+							info = "*";
+							break;
+					}
+					info = info.substring(0,7);
+					let padLength = Math.floor((7-info.length)/2); //do we need to pad it out
+					if (padLength >= 1) {
+						for (let i=0; i<padLength; i++) {
+							info = " "+info; //preappend space
+						}
+					}
+
+					printStr += info+"\t|";
+				}
+			}
+			console.log(printStr);
+		}
+		console.log(divider);
+	}
+}
+
+const componentLookup = uuid => {
+	for (let i=0; i<store.components.length; i++) {
+		if (store.components[i].uuid == uuid) {
+			return store.components[i];
+		}
+	}
+	return false;
+}
+
+const getSpaceInBox = box => {
+	let s = 0;
+	for (let i=0; i<box.sections.length; i++) {
+		for (let j=0; j<box.sections[i].assignments.length; j++) {
+			for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+				if (box.sections[i].assignments[j][b] == "") {
+					s++;
+				}
+			}
+		}
+	}
+
+	return s;
+} 
 
 /*
 USER INPUT
@@ -960,7 +1256,7 @@ const main = () => {
 }
 
 const afterMain = () => {
-	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Storage Info", "Save Data File", "Export Labels", "Exit"];
+	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Assign Components", "Storage Info", "Save Data File", "Export Labels", "Exit"];
 	inquirer.prompt({
 		name: "mC",
 		message: "Choose an action:",
@@ -1035,6 +1331,10 @@ const afterMain = () => {
 				addN(0);
 			})
 		} else if (choice == mChoices[4]) {
+			assignComponents().then(() => {
+				afterMain();
+			})
+		} else if (choice == mChoices[5]) {
 			console.log("\n~~~~ Storage Info ~~~");
 			console.log("Total Component Count: "+store.componentTotal);
 			console.log("~~~~~\nComponent breakdown:\nType\t\tEntryCount\tComponentCount");
@@ -1074,8 +1374,9 @@ const afterMain = () => {
 			console.log("\n~~~~ End Storage Info ~~~~");
 
 			afterMain(); //return to main
-		} else if (choice == mChoices[5]) {
+		} else if (choice == mChoices[6]) {
 			console.log("Save to directory:");
+			
 			dirPicker(".").then(dir => {
 				getFilesInDir(dir).then(files => {
 					let fileExists = false;
@@ -1118,6 +1419,17 @@ const afterMain = () => {
 					}
 				});
 			});
+		} else if (choice == mChoices[7]) {
+			console.log("Pick save directory for the images:")''
+			dirPicker(".").then(dir => {
+				exportImages(dir).then(() => {
+					console.log("Exported images successfully!");
+					afterMain();
+				}).catch(e => {
+					console.error("There was an error saving the images: "+e);
+					afterMain();
+				})
+			});
 		}
 	})
 }
@@ -1125,11 +1437,3 @@ const afterMain = () => {
 
 
 main(); //let's get this show on the road shall we?
-
-
-/*
-Generating printable pages:
-
-start with blank canvas of correct size
-print box labels as entire sheet
-*/
