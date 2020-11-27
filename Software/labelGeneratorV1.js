@@ -26,11 +26,15 @@ const bDefs = require("./boxDefinitions.js");
 
 //constants
 const canvasWidth = 4; //in
-const canvasHeight = 5.5; //in
+const canvasHeight = 7.3; //in
 
 const ppi = 300;
 const canvasWidthPx = canvasWidth*ppi;
 const canvasHeightPx = canvasHeight*ppi;
+
+const inToPx = uIn => {
+	return uIn*ppi;
+}
 
 
 var store = {
@@ -40,38 +44,153 @@ var store = {
 	boxTotal: -1
 }
 
-
-
-
-const exportCanvas = async function(store) {
-	console.log("Canvas now exporting!");
-	const canvas = createCanvas(canvasWidthPx, canvasHeightPx);
-	const ctx = canvas.getContext('2d');
-
-	//fill background
-	ctx.fillStyle = "#000";
-	ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
-
-	//text
-	const text = 'Hello, World!'
-
-	ctx.textBaseline = 'top'
-	ctx.fillStyle = '#3574d4'
-	const textWidth = ctx.measureText(text).width
-	ctx.fillRect(600 - textWidth / 2 - 10, 170 - 5, textWidth + 20, 120)
-	ctx.fillStyle = '#fff'
-	ctx.fillText(text, 600, 170)
-
-	const buffer = canvas.toBuffer('image/png');
-
-	fs.writeFileSync('./test.png', buffer);
-
-}
-
 const exportImages = dir => { //Will export images from store
 	return new Promise((resolve, reject) => {
-		
+		/*
+		Steps:
+		1) export box labels (full sheet sideways)
+		2) get array of all things to print in format [info, id]
+		3) render all things to print onto images
+		*/
+
+		let writeI = (canvas, imgName) => {
+			let buf = canvas.toBuffer('image/png');
+			fs.writeFileSync(path.join(dir, (imgName.indexOf("png") > -1) ? imgName : imgName+".png"), buf);
+		}
+
+		let initBasicCanvas = () => {
+			let canvas = createCanvas(canvasWidthPx, canvasHeightPx);
+			let ctx = canvas.getContext('2d');
+
+			ctx.fillStyle = "#fff";
+			ctx.textBaseline = 'top';
+			ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
+
+			return {canvas: canvas, ctx: ctx};
+		}
+
+		let boxPrintInfo = [];
+		for (let i=0; i<store.boxes.length; i++) { //Generate box labels
+			boxPrintInfo.push([store.boxes[i].title, store.boxes[i].description]);
+		}
+
+		let heightBoxLabel = inToPx(1.25);
+		let boxesPerSheet = Math.floor(canvasHeightPx/(heightBoxLabel+inToPx(0.1)));
+		let boxSheets = Math.ceil(boxPrintInfo.length/boxesPerSheet);
+		let boxIdx = 0;
+		for (let i=0; i<boxSheets; i++) {
+			let {canvas, ctx} = initBasicCanvas();
+
+			ctx.strokeStyle = "#000";
+			ctx.lineWidth = 20;
+
+			
+			ctx.fillStyle = '#000';
+			let y = inToPx(0.066);
+			for (let j=0; j<Math.min(boxPrintInfo.length,boxesPerSheet); j++) {
+				canvasRoundRect(ctx, 10, y, canvasWidthPx-20, heightBoxLabel, 20, false, true);
+				
+				let title = boxPrintInfo[boxIdx][0].substring(0, 16).trim();
+				let desc = boxPrintInfo[boxIdx][1].substring(0, 50).trim();				
+
+				ctx.font = "bold 125px Helvetica";
+				const titleWidth = ctx.measureText(title).width;
+				ctx.fillText(title, (canvasWidthPx-20-titleWidth)/2, y+inToPx(0.2));
+
+				ctx.font = "52px Helvetica";
+				const descWidth = ctx.measureText(desc).width;
+				ctx.fillText(desc, (canvasWidthPx-20-descWidth)/2, y+inToPx(0.8));
+
+				y+=heightBoxLabel+inToPx(0.1);
+				boxIdx++;
+			}
+			writeI(canvas, "label-box-"+(i+1));
+		}
+
+		let componentPrintInfo = []; //value, qty, row, col
+		for (let i=0; i<store.components.length; i++) {
+			let component = store.components[i];
+			if (!component.assigned) continue;
+
+			let info = "";
+			switch(component.type) {
+				case cDefs.types.RESISTOR:
+				case cDefs.types.CAPACITOR:
+					info = component.additional.value+component.additional.valueUnit;
+					break;
+				case cDefs.types.IC:
+				case cDefs.types.OTHER:
+					info = component.additional.identifier;
+					break;
+				case cDefs.types.CRYSTAL:
+					info = component.additional.frequency+component.additional.frequencyUnit;
+					break;
+				default:
+					info = "Unknown";
+					break;
+			}
+
+			let found = false;
+			for (let z=0; z<store.boxes.length; z++) {
+				let box = store.boxes[z];
+				for (let i=0; i<box.sections.length; i++) {
+					for (let j=0; j<box.sections[i].assignments.length; j++) {
+						for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+							if (box.sections[i].assignments[j][b] == component.uuid) { //check uuid match
+								componentPrintInfo.push([info, component.quantity, (j+1), (b+1)])
+
+								found = true;
+								break;
+							}
+						}
+						if (found) break;
+					}
+					if (found) break;
+				}
+			}
+		}
+
+		//TODO HERE: RENDER AND EXPORT IMAGES
+		//FORMAT FOR componentPrintInfo is value, qty, row, col
+
+		console.log(componentPrintInfo);
 	})
+}
+
+//from https://stackoverflow.com/questions/1255512/how-to-draw-a-rounded-rectangle-on-html-canvas
+function canvasRoundRect(ctx, x, y, width, height, radius, fill, stroke) {
+  if (typeof stroke === 'undefined') {
+    stroke = true;
+  }
+  if (typeof radius === 'undefined') {
+    radius = 5;
+  }
+  if (typeof radius === 'number') {
+    radius = {tl: radius, tr: radius, br: radius, bl: radius};
+  } else {
+    var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+    for (var side in defaultRadius) {
+      radius[side] = radius[side] || defaultRadius[side];
+    }
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius.tl, y);
+  ctx.lineTo(x + width - radius.tr, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+  ctx.lineTo(x + width, y + height - radius.br);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+  ctx.lineTo(x + radius.bl, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+  ctx.lineTo(x, y + radius.tl);
+  ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+  ctx.closePath();
+  if (fill) {
+    ctx.fill();
+  }
+  if (stroke) {
+    ctx.stroke();
+  }
+
 }
 
 /*
@@ -1420,7 +1539,7 @@ const afterMain = () => {
 				});
 			});
 		} else if (choice == mChoices[7]) {
-			console.log("Pick save directory for the images:")''
+			console.log("Pick save directory for the images:");
 			dirPicker(".").then(dir => {
 				exportImages(dir).then(() => {
 					console.log("Exported images successfully!");
