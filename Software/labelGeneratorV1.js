@@ -1,16 +1,12 @@
 //labelGeneratorV1.js
 //Written by Aaron Becker later then he should be awake lol
 
-//Todos: when adding component, if already assigned tell where
-//Lookup function with box visualization, highlight in red where component would go
-//Box section code example - B1-S1-1-2
-
-/*
-Generating printable pages:
-
-start with blank canvas of correct size
-print box labels as entire sheet
+/*Todos:
+- when adding component, if already assigned tell where
+- Lookup function with box visualization, highlight in red where component would go
+- change rendering method to dynamically fill page (when get to too large, just create another page) instead of precomputing
 */
+
 
 //libs
 const fs = require('fs');
@@ -32,9 +28,17 @@ const ppi = 300;
 const canvasWidthPx = canvasWidth*ppi;
 const canvasHeightPx = canvasHeight*ppi;
 
+
 const inToPx = uIn => {
 	return uIn*ppi;
 }
+
+//Label size defs
+const heightBoxLabel = inToPx(1.25);
+const componentLabelSmallDim = [inToPx(0.35), inToPx(0.6)]; //height, width in px
+const componentLabelMediumDim = [inToPx(0.5), inToPx(0.8)]; //NOT TESTED YET
+const componentLabelLargeDim = [inToPx(0.75), inToPx(0.75)]; //NOT TESTED YET
+
 
 
 var store = {
@@ -53,7 +57,7 @@ const exportImages = dir => { //Will export images from store
 		3) render all things to print onto images
 		*/
 
-		let writeI = (canvas, imgName) => {
+		let writeCanvas = (canvas, imgName) => {
 			let buf = canvas.toBuffer('image/png');
 			fs.writeFileSync(path.join(dir, (imgName.indexOf("png") > -1) ? imgName : imgName+".png"), buf);
 		}
@@ -74,7 +78,6 @@ const exportImages = dir => { //Will export images from store
 			boxPrintInfo.push([store.boxes[i].title, store.boxes[i].description]);
 		}
 
-		let heightBoxLabel = inToPx(1.25);
 		let boxesPerSheet = Math.floor(canvasHeightPx/(heightBoxLabel+inToPx(0.1)));
 		let boxSheets = Math.ceil(boxPrintInfo.length/boxesPerSheet);
 		let boxIdx = 0;
@@ -88,7 +91,7 @@ const exportImages = dir => { //Will export images from store
 			ctx.fillStyle = '#000';
 			let y = inToPx(0.066);
 			for (let j=0; j<Math.min(boxPrintInfo.length,boxesPerSheet); j++) {
-				canvasRoundRect(ctx, 10, y, canvasWidthPx-20, heightBoxLabel, 20, false, true);
+				canvasRoundRect(ctx, 20, y, canvasWidthPx-40, heightBoxLabel, 50, false, true);
 				
 				let title = boxPrintInfo[boxIdx][0].substring(0, 16).trim();
 				let desc = boxPrintInfo[boxIdx][1].substring(0, 50).trim();				
@@ -104,8 +107,9 @@ const exportImages = dir => { //Will export images from store
 				y+=heightBoxLabel+inToPx(0.1);
 				boxIdx++;
 			}
-			writeI(canvas, "label-box-"+(i+1));
+			writeCanvas(canvas, "label-box-"+(i+1));
 		}
+		console.log("Successfully exported "+boxSheets+" sheet(s) of box labels");
 
 		let componentPrintInfo = []; //value, qty, row, col
 		for (let i=0; i<store.components.length; i++) {
@@ -137,7 +141,15 @@ const exportImages = dir => { //Will export images from store
 					for (let j=0; j<box.sections[i].assignments.length; j++) {
 						for (let b=0; b<box.sections[i].assignments[j].length; b++) {
 							if (box.sections[i].assignments[j][b] == component.uuid) { //check uuid match
-								componentPrintInfo.push([info, component.quantity, (j+1), (b+1)])
+								componentPrintInfo.push({
+									value: info,
+									quantity: component.quantity,
+									boxNum: (z+1),
+									sectionNum: (i+1),
+									sectionType: box.sections[i].type,
+									sectionRow: (j+1),
+									sectionCol: (b+1)
+								});
 
 								found = true;
 								break;
@@ -150,10 +162,137 @@ const exportImages = dir => { //Will export images from store
 			}
 		}
 
-		//TODO HERE: RENDER AND EXPORT IMAGES
-		//FORMAT FOR componentPrintInfo is value, qty, row, col
+		let smallLabelComponents = [];
+		let mediumLabelComponents = [];
+		let largeLabelComponents = [];
+		for (let i=0; i<componentPrintInfo.length; i++) {
+			let st = componentPrintInfo[i].sectionType.toLowerCase();
+			((st == "small")?smallLabelComponents:(st == "medium")?medLabelComponents:largeLabelComponents).push(componentPrintInfo[i]);
+		}
+		//Small
+		let labelsPerRowSmall = Math.floor(canvasWidthPx/(componentLabelSmallDim[1]+inToPx(0.066)));
+		let labelsPerSheetSmall = Math.floor(canvasHeightPx/(labelsPerRowSmall+inToPx(0.1)));
+		let labelSheetsSmall = Math.ceil(smallLabelComponents.length/labelsPerSheetSmall);
+		//Med
+		let labelsPerRowMedium = Math.floor(canvasWidthPx/(componentLabelMediumDim[1]+inToPx(0.066)));
+		let labelsPerSheetMedium = Math.floor(canvasHeightPx/(labelsPerRowMedium+inToPx(0.1)));
+		let labelSheetsMedium = Math.ceil(mediumLabelComponents.length/labelsPerSheetMedium);
+		//Large
+		let labelsPerRowLarge = Math.floor(canvasWidthPx/(componentLabelLargeDim[1]+inToPx(0.066)));
+		let labelsPerSheetLarge = Math.floor(canvasHeightPx/(labelsPerRowLarge+inToPx(0.1)));
+		let labelSheetsLarge = Math.ceil(largeLabelComponents.length/labelsPerSheetLarge);
 
-		console.log(componentPrintInfo);
+		let compIdx = 0;
+		for (let i=0; i<labelSheetsSmall; i++) {
+			let {canvas, ctx} = initBasicCanvas();
+
+			ctx.strokeStyle = "#000";
+			ctx.lineWidth = 5;
+
+			
+			ctx.fillStyle = '#000';
+			let y = inToPx(0.066);
+			let x = inToPx(0.066);
+			for (let j=0; j<Math.min(smallLabelComponents.length,labelsPerSheetSmall); j++) {
+				canvasRoundRect(ctx, x, y, componentLabelSmallDim[1], componentLabelSmallDim[0], 10, false, true);
+				
+				let component = smallLabelComponents[compIdx];
+				let value = component.value.substring(0, 6).trim();
+				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+
+				ctx.font = "bold 50px Helvetica";
+				const valueWidth = ctx.measureText(value).width;
+				ctx.fillText(value, ((componentLabelSmallDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+
+				ctx.font = "25px Helvetica";
+				const codeWidth = ctx.measureText(code).width;
+				ctx.fillText(code, ((componentLabelSmallDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+				x+=componentLabelSmallDim[1]+inToPx(0.05);
+				if (x/componentLabelSmallDim[1] > labelsPerRowSmall) {
+					x = inToPx(0.066);
+					y+=componentLabelSmallDim[0]+inToPx(0.066);
+				}
+				compIdx++;
+			}
+			writeCanvas(canvas, "label-small-"+(i+1));
+		}
+		console.log("Successfully exported "+boxSheets+" sheet(s) of small labels");
+
+		compIdx = 0;
+		for (let i=0; i<labelSheetsMedium; i++) {
+			let {canvas, ctx} = initBasicCanvas();
+
+			ctx.strokeStyle = "#000";
+			ctx.lineWidth = 5;
+			
+			ctx.fillStyle = '#000';
+			let y = inToPx(0.066);
+			let x = inToPx(0.066);
+			for (let j=0; j<Math.min(mediumLabelComponents.length,labelsPerSheetMedium); j++) {
+				canvasRoundRect(ctx, x, y, componentLabelMediumDim[1], componentLabelMediumDim[0], 10, false, true);
+				
+				let component = mediumLabelComponents[compIdx];
+				let value = component.value.substring(0, 6).trim();
+				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+
+				ctx.font = "bold 50px Helvetica";
+				const valueWidth = ctx.measureText(value).width;
+				ctx.fillText(value, ((componentLabelMediumDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+
+				ctx.font = "25px Helvetica";
+				const codeWidth = ctx.measureText(code).width;
+				ctx.fillText(code, ((componentLabelMediumDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+				x+=componentLabelMediumDim[1]+inToPx(0.05);
+				if (x/componentLabelMediumDim[1] > labelsPerRowMedium) {
+					x = inToPx(0.066);
+					y+=componentLabelMediumDim[0]+inToPx(0.066);
+				}
+				compIdx++;
+			}
+			writeCanvas(canvas, "label-medium-"+(i+1));
+		}
+		console.log("Successfully exported "+boxSheets+" sheet(s) of medium labels");
+
+		compIdx = 0;
+		for (let i=0; i<labelSheetsLarge; i++) {
+			let {canvas, ctx} = initBasicCanvas();
+
+			ctx.strokeStyle = "#000";
+			ctx.lineWidth = 5;
+
+			
+			ctx.fillStyle = '#000';
+			let y = inToPx(0.066);
+			let x = inToPx(0.066);
+			for (let j=0; j<Math.min(largeLabelComponents.length,labelsPerSheetLarge); j++) {
+				canvasRoundRect(ctx, x, y, componentLabelLargeDim[1], componentLabelLargeDim[0], 10, false, true);
+				
+				let component = largeLabelComponents[compIdx];
+				let value = component.value.substring(0, 6).trim();
+				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+
+				ctx.font = "bold 50px Helvetica";
+				const valueWidth = ctx.measureText(value).width;
+				ctx.fillText(value, ((componentLabelLargeDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+
+				ctx.font = "25px Helvetica";
+				const codeWidth = ctx.measureText(code).width;
+				ctx.fillText(code, ((componentLabelLargeDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+				x+=componentLabelLargeDim[1]+inToPx(0.05);
+				if (x/componentLabelLargeDim[1] > labelsPerRowLarge) {
+					x = inToPx(0.066);
+					y+=componentLabelLargeDim[0]+inToPx(0.066);
+				}
+				compIdx++;
+			}
+			writeCanvas(canvas, "label-large-"+(i+1));
+		}
+		console.log("Successfully exported "+boxSheets+" sheet(s) of large labels");
+
+		return resolve();
 	})
 }
 
