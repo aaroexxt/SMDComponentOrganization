@@ -6,6 +6,8 @@
 - Lookup function with box visualization, highlight in red where component would go
 - change rendering method to dynamically fill page (when get to too large, just create another page) instead of precomputing
 - finish component additional asking for other types (diode etc)
+- unassign function
+- 'auto' unit selection which will convert to best possible unit choice
 */
 
 
@@ -20,7 +22,7 @@ const bDefs = require("./boxDefinitions.js");
 
 //constants
 const canvasWidth = 4; //in
-const canvasHeight = 7.3; //in
+const canvasHeight = 6; //in
 
 const ppi = 300;
 const canvasWidthPx = canvasWidth*ppi;
@@ -98,9 +100,9 @@ const exportImages = dir => { //Will export images from store
 				const titleWidth = ctx.measureText(title).width;
 				ctx.fillText(title, (canvasWidthPx-20-titleWidth)/2, y+inToPx(0.2));
 
-				ctx.font = "52px Helvetica";
+				ctx.font = "75px Helvetica";
 				const descWidth = ctx.measureText(desc).width;
-				ctx.fillText(desc, (canvasWidthPx-20-descWidth)/2, y+inToPx(0.8));
+				ctx.fillText(desc, (canvasWidthPx-20-descWidth)/2, y+inToPx(0.75));
 
 				y+=heightBoxLabel+inToPx(0.1);
 				boxIdx++;
@@ -169,124 +171,136 @@ const exportImages = dir => { //Will export images from store
 		}
 		//Small
 		let labelsPerRowSmall = Math.floor(canvasWidthPx/(componentLabelSmallDim[1]+inToPx(0.066)));
-		let labelsPerSheetSmall = Math.floor(canvasHeightPx/(labelsPerRowSmall+inToPx(0.1)));
+		let labelsPerSheetSmall = labelsPerRowSmall*Math.floor(canvasHeightPx/(componentLabelSmallDim[0]+inToPx(0.1)));
 		let labelSheetsSmall = Math.ceil(smallLabelComponents.length/labelsPerSheetSmall);
 		//Med
 		let labelsPerRowMedium = Math.floor(canvasWidthPx/(componentLabelMediumDim[1]+inToPx(0.066)));
-		let labelsPerSheetMedium = Math.floor(canvasHeightPx/(labelsPerRowMedium+inToPx(0.1)));
+		let labelsPerSheetMedium = labelsPerRowMedium*Math.floor(canvasHeightPx/(componentLabelMediumDim[0]+inToPx(0.1)));
 		let labelSheetsMedium = Math.ceil(mediumLabelComponents.length/labelsPerSheetMedium);
 		//Large
 		let labelsPerRowLarge = Math.floor(canvasWidthPx/(componentLabelLargeDim[1]+inToPx(0.066)));
-		let labelsPerSheetLarge = Math.floor(canvasHeightPx/(labelsPerRowLarge+inToPx(0.1)));
+		let labelsPerSheetLarge = labelsPerRowLarge*Math.floor(canvasHeightPx/(componentLabelLargeDim[0]+inToPx(0.1)));
 		let labelSheetsLarge = Math.ceil(largeLabelComponents.length/labelsPerSheetLarge);
 
 		let compIdx = 0;
-		for (let i=0; i<labelSheetsSmall; i++) {
-			let {canvas, ctx} = initBasicCanvas();
+		if (labelSheetsSmall > 0) {
+			for (let i=0; i<labelSheetsSmall; i++) {
+				let {canvas, ctx} = initBasicCanvas();
 
-			ctx.strokeStyle = "#000";
-			ctx.lineWidth = 5;
+				ctx.strokeStyle = "#000";
+				ctx.lineWidth = 5;
 
-			
-			ctx.fillStyle = '#000';
-			let y = inToPx(0.066);
-			let x = inToPx(0.066);
-			for (let j=0; j<Math.min(smallLabelComponents.length,labelsPerSheetSmall); j++) {
-				canvasRoundRect(ctx, x, y, componentLabelSmallDim[1], componentLabelSmallDim[0], 10, false, true);
 				
-				let component = smallLabelComponents[compIdx];
-				let value = component.value.substring(0, 6).trim();
-				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+				ctx.fillStyle = '#000';
+				let y = inToPx(0.066);
+				let x = inToPx(0.066);
+				for (let j=0; j<Math.min(smallLabelComponents.length,labelsPerSheetSmall); j++) {
+					let component = smallLabelComponents[compIdx];
+					if (!component) continue;
 
-				ctx.font = "bold 50px Helvetica";
-				const valueWidth = ctx.measureText(value).width;
-				ctx.fillText(value, ((componentLabelSmallDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+					canvasRoundRect(ctx, x, y, componentLabelSmallDim[1], componentLabelSmallDim[0], 10, false, true);
+					
+					let value = component.value.substring(0, 6).trim();
+					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
 
-				ctx.font = "25px Helvetica";
-				const codeWidth = ctx.measureText(code).width;
-				ctx.fillText(code, ((componentLabelSmallDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+					ctx.font = "bold 50px Helvetica";
+					const valueWidth = ctx.measureText(value).width;
+					ctx.fillText(value, ((componentLabelSmallDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
 
-				x+=componentLabelSmallDim[1]+inToPx(0.05);
-				if (x/componentLabelSmallDim[1] > labelsPerRowSmall) {
-					x = inToPx(0.066);
-					y+=componentLabelSmallDim[0]+inToPx(0.066);
+					ctx.font = "25px Helvetica";
+					const codeWidth = ctx.measureText(code).width;
+					ctx.fillText(code, ((componentLabelSmallDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+					x+=componentLabelSmallDim[1]+inToPx(0.05);
+					if (x/componentLabelSmallDim[1] > labelsPerRowSmall) {
+						x = inToPx(0.066);
+						y+=componentLabelSmallDim[0]+inToPx(0.066);
+					}
+					compIdx++;
 				}
-				compIdx++;
+				writeCanvas(canvas, "label-small-"+(i+1));
 			}
-			writeCanvas(canvas, "label-small-"+(i+1));
 		}
 		console.log("Successfully exported "+labelSheetsSmall+" sheet(s) of small labels");
 
 		compIdx = 0;
-		for (let i=0; i<labelSheetsMedium; i++) {
-			let {canvas, ctx} = initBasicCanvas();
+		if (labelSheetsMedium > 0) {
+			for (let i=0; i<labelSheetsMedium; i++) {
+				let {canvas, ctx} = initBasicCanvas();
 
-			ctx.strokeStyle = "#000";
-			ctx.lineWidth = 5;
-			
-			ctx.fillStyle = '#000';
-			let y = inToPx(0.066);
-			let x = inToPx(0.066);
-			for (let j=0; j<Math.min(mediumLabelComponents.length,labelsPerSheetMedium); j++) {
-				canvasRoundRect(ctx, x, y, componentLabelMediumDim[1], componentLabelMediumDim[0], 10, false, true);
+				ctx.strokeStyle = "#000";
+				ctx.lineWidth = 5;
 				
-				let component = mediumLabelComponents[compIdx];
-				let value = component.value.substring(0, 6).trim();
-				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+				ctx.fillStyle = '#000';
+				let y = inToPx(0.066);
+				let x = inToPx(0.066);
+				for (let j=0; j<Math.min(mediumLabelComponents.length,labelsPerSheetMedium); j++) {
+					let component = mediumLabelComponents[compIdx];
+					if (!component) continue;
 
-				ctx.font = "bold 50px Helvetica";
-				const valueWidth = ctx.measureText(value).width;
-				ctx.fillText(value, ((componentLabelMediumDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+					canvasRoundRect(ctx, x, y, componentLabelMediumDim[1], componentLabelMediumDim[0], 10, false, true);
+					
+					let value = component.value.substring(0, 6).trim();
+					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
 
-				ctx.font = "25px Helvetica";
-				const codeWidth = ctx.measureText(code).width;
-				ctx.fillText(code, ((componentLabelMediumDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+					ctx.font = "bold 50px Helvetica";
+					const valueWidth = ctx.measureText(value).width;
+					ctx.fillText(value, ((componentLabelMediumDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
 
-				x+=componentLabelMediumDim[1]+inToPx(0.05);
-				if (x/componentLabelMediumDim[1] > labelsPerRowMedium) {
-					x = inToPx(0.066);
-					y+=componentLabelMediumDim[0]+inToPx(0.066);
+					ctx.font = "25px Helvetica";
+					const codeWidth = ctx.measureText(code).width;
+					ctx.fillText(code, ((componentLabelMediumDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+					x+=componentLabelMediumDim[1]+inToPx(0.05);
+					if (x/componentLabelMediumDim[1] > labelsPerRowMedium) {
+						x = inToPx(0.066);
+						y+=componentLabelMediumDim[0]+inToPx(0.066);
+					}
+					compIdx++;
 				}
-				compIdx++;
+				writeCanvas(canvas, "label-medium-"+(i+1));
 			}
-			writeCanvas(canvas, "label-medium-"+(i+1));
 		}
 		console.log("Successfully exported "+labelSheetsMedium+" sheet(s) of medium labels");
 
 		compIdx = 0;
-		for (let i=0; i<labelSheetsLarge; i++) {
-			let {canvas, ctx} = initBasicCanvas();
+		if (labelSheetsLarge > 0) {
+			for (let i=0; i<labelSheetsLarge; i++) {
+				let {canvas, ctx} = initBasicCanvas();
 
-			ctx.strokeStyle = "#000";
-			ctx.lineWidth = 5;
+				ctx.strokeStyle = "#000";
+				ctx.lineWidth = 5;
 
-			
-			ctx.fillStyle = '#000';
-			let y = inToPx(0.066);
-			let x = inToPx(0.066);
-			for (let j=0; j<Math.min(largeLabelComponents.length,labelsPerSheetLarge); j++) {
-				canvasRoundRect(ctx, x, y, componentLabelLargeDim[1], componentLabelLargeDim[0], 10, false, true);
 				
-				let component = largeLabelComponents[compIdx];
-				let value = component.value.substring(0, 6).trim();
-				let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+				ctx.fillStyle = '#000';
+				let y = inToPx(0.066);
+				let x = inToPx(0.066);
+				for (let j=0; j<Math.min(largeLabelComponents.length,labelsPerSheetLarge); j++) {
+					let component = largeLabelComponents[compIdx];
+					if (!component) continue;
 
-				ctx.font = "bold 50px Helvetica";
-				const valueWidth = ctx.measureText(value).width;
-				ctx.fillText(value, ((componentLabelLargeDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+					canvasRoundRect(ctx, x, y, componentLabelLargeDim[1], componentLabelLargeDim[0], 10, false, true);
+			
+					let value = component.value.substring(0, 6).trim();
+					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
 
-				ctx.font = "25px Helvetica";
-				const codeWidth = ctx.measureText(code).width;
-				ctx.fillText(code, ((componentLabelLargeDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+					ctx.font = "bold 50px Helvetica";
+					const valueWidth = ctx.measureText(value).width;
+					ctx.fillText(value, ((componentLabelLargeDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
 
-				x+=componentLabelLargeDim[1]+inToPx(0.05);
-				if (x/componentLabelLargeDim[1] > labelsPerRowLarge) {
-					x = inToPx(0.066);
-					y+=componentLabelLargeDim[0]+inToPx(0.066);
+					ctx.font = "25px Helvetica";
+					const codeWidth = ctx.measureText(code).width;
+					ctx.fillText(code, ((componentLabelLargeDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+
+					x+=componentLabelLargeDim[1]+inToPx(0.05);
+					if (x/componentLabelLargeDim[1] > labelsPerRowLarge) {
+						x = inToPx(0.066);
+						y+=componentLabelLargeDim[0]+inToPx(0.066);
+					}
+					compIdx++;
 				}
-				compIdx++;
+				writeCanvas(canvas, "label-large-"+(i+1));
 			}
-			writeCanvas(canvas, "label-large-"+(i+1));
 		}
 		console.log("Successfully exported "+labelSheetsLarge+" sheet(s) of large labels");
 
@@ -296,37 +310,37 @@ const exportImages = dir => { //Will export images from store
 
 //from https://stackoverflow.com/questions/1255512/how-to-draw-a-rounded-rectangle-on-html-canvas
 function canvasRoundRect(ctx, x, y, width, height, radius, fill, stroke) {
-  if (typeof stroke === 'undefined') {
-    stroke = true;
-  }
-  if (typeof radius === 'undefined') {
-    radius = 5;
-  }
-  if (typeof radius === 'number') {
-    radius = {tl: radius, tr: radius, br: radius, bl: radius};
-  } else {
-    var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
-    for (var side in defaultRadius) {
-      radius[side] = radius[side] || defaultRadius[side];
-    }
-  }
-  ctx.beginPath();
-  ctx.moveTo(x + radius.tl, y);
-  ctx.lineTo(x + width - radius.tr, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
-  ctx.lineTo(x + width, y + height - radius.br);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
-  ctx.lineTo(x + radius.bl, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
-  ctx.lineTo(x, y + radius.tl);
-  ctx.quadraticCurveTo(x, y, x + radius.tl, y);
-  ctx.closePath();
-  if (fill) {
-    ctx.fill();
-  }
-  if (stroke) {
-    ctx.stroke();
-  }
+	if (typeof stroke === 'undefined') {
+		stroke = true;
+	}
+	if (typeof radius === 'undefined') {
+		radius = 5;
+	}
+	if (typeof radius === 'number') {
+		radius = {tl: radius, tr: radius, br: radius, bl: radius};
+	} else {
+		var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+		for (var side in defaultRadius) {
+		  radius[side] = radius[side] || defaultRadius[side];
+		}
+	}
+	ctx.beginPath();
+	ctx.moveTo(x + radius.tl, y);
+	ctx.lineTo(x + width - radius.tr, y);
+	ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+	ctx.lineTo(x + width, y + height - radius.br);
+	ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+	ctx.lineTo(x + radius.bl, y + height);
+	ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+	ctx.lineTo(x, y + radius.tl);
+	ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+	ctx.closePath();
+	if (fill) {
+		ctx.fill();
+	}
+	if (stroke) {
+		ctx.stroke();
+	}
 
 }
 
@@ -360,7 +374,7 @@ const dirPicker = startDir => {
 			return resolve(dirs[0]);
 		} else {
 			inquirer.prompt({
-				name: "Choose a directory:",
+				name: "Choose a directory",
 				type: "list",
 				choices: dirs
 			}).then(choice => {
@@ -437,7 +451,7 @@ const boxSelector = () => {
 
 						inquirer.prompt({
 							name: "sType",
-							message: "Pick a section type:",
+							message: "Pick a section type",
 							type: "list",
 							choices: bDefs.sectionTypes
 						}).then(sType => {
@@ -491,6 +505,306 @@ const boxSelector = () => {
 /*
 COMPONENT SELECTION
 */
+
+const groupComponentSelector = () => {
+	return new Promise((resolve, reject) => {
+		//Base component to build value into
+		var component = {
+			additional: {}
+		};
+		//Setup choices
+		let componentChoices = ["Cancel"];
+		for (const prop in cDefs.groupTypes) {
+			componentChoices.push(cDefs.groupTypes[prop]);
+		};
+
+		let sizeChoices = [];
+		for (const prop in cDefs.smdSizes) {
+			sizeChoices.push(cDefs.smdSizes[prop]);
+		}
+
+		let manufacturerChoices = ["Other"];
+		cDefs.manufacturers.forEach(m => {
+			manufacturerChoices.push(m);
+		})
+
+		let numComponents;
+		let commonType, commonSize, commonQty, commonManuf;
+
+		//Ask user what they want
+		inquirer.prompt({
+			name: "cAmn",
+			message: "Enter number of components with common params to add:",
+			type: "number"
+		}).then(nc => {
+			numComponents = nc[Object.keys(nc)[0]];
+			inquirer.prompt({
+				name: "type",
+				message: "Pick a Component Type for Group",
+				type: "list",
+				choices: componentChoices,
+			}).then(choiceType => {
+				let keysCT = Object.keys(choiceType);
+				choiceType = choiceType[keysCT[0]];
+
+				if (choiceType == "Cancel") { //insta-return boii
+					return reject("cancelled");
+				}
+
+				inquirer.prompt({
+					name: "size",
+					message: "Pick Component Size for Group",
+					type: "list",
+					choices: sizeChoices
+				}).then(choiceSize => {
+					let keysSZ = Object.keys(choiceSize);
+					choiceSize = choiceSize[keysSZ[0]];
+
+
+					if (choiceSize == cDefs.smdSizes.ICPACKAGES) { //IC packages need more type information
+						selectICPackage().then(icPkg => {
+							choiceSize = "SMD-"+icPkg;
+							sizeDone(choiceType, choiceSize);
+						})
+					} else {
+						sizeDone(choiceType, choiceSize);
+					}
+
+					
+				})
+			})
+		})
+
+		function sizeDone(choiceType, choiceSize) { //For some components, we have a more complex flow with size, so this function seperates it out
+			inquirer.prompt({
+				name: "qty",
+				message: "Input Group Quantity:",
+				type: "number"
+			}).then(inputQTY => {
+				let keysQTY = Object.keys(inputQTY);
+				inputQTY = inputQTY[keysQTY[0]];
+
+				inquirer.prompt({
+					name: "mf",
+					message: "Choose Group Manufacturer",
+					type: "list",
+					choices: manufacturerChoices	
+				}).then(choiceManuf => {
+					let keysMF = Object.keys(choiceManuf);
+					choiceManuf = choiceManuf[keysMF[0]];
+
+					if (choiceManuf == "Other") {
+						inquirer.prompt({
+							name: "mpn",
+							message: "Input Group Manufacturer:",
+							type: "input"
+						}).then(inputMPN => {
+							let keysMPN = Object.keys(inputMPN);
+							inputMPN = inputMPN[keysMPN[0]];
+
+							commonType = choiceType;
+							commonSize = choiceSize;
+							commonQty = inputQTY;
+							commonManuf = inputMPN;
+							basicPromptsDone();
+						})
+					} else {
+						commonType = choiceType;
+						commonSize = choiceSize;
+						commonQty = inputQTY;
+						commonManuf = choiceManuf;
+						basicPromptsDone();
+					}
+				})
+			})
+		}
+
+		function basicPromptsDone() {
+			component.quantity = commonQty;
+			component.size = commonSize;
+			component.manufacturer = commonManuf;
+			component.uuid = generateUUID();
+			component.assigned = false;
+
+			//Now we ask for additional information
+			switch (commonType) {
+				case "Back":
+					return reject("back");
+					break;
+				case cDefs.types.RESISTOR: //Resistor
+					component.type = cDefs.types.RESISTOR;
+
+					inquirer.prompt({
+						name: "tol",
+						message: "Enter common tolerance (in %):",
+						type: "number"
+					}).then(tol => {
+						tol = tol[Object.keys(tol)[0]];
+
+						component.additional.tolerance = fixFloatRounding(tol);
+						component.additional.toleranceUnit = "%";
+
+						askN(0);
+					})
+					break;
+				case cDefs.types.CAPACITOR: //Capacitor
+					component.type = cDefs.types.CAPACITOR;
+
+					let toleranceUnitsLong = [];
+					let toleranceUnitsShort = [];
+					let toleranceMults = [];
+					cDefs.units[cDefs.types.CAPACITOR].tolerance.forEach(t => {
+						toleranceUnitsLong.push(t[0]);
+						toleranceUnitsShort.push(t[1]);
+						if (typeof t[2] == "undefined") {
+							toleranceMults.push(0);
+						} else {
+							toleranceMults.push(t[2]);
+						}
+						
+					})
+
+					inquirer.prompt({
+						name: "tolU",
+						message: "Pick a common tolerance unit",
+						type: "list",
+						choices: toleranceUnitsLong
+					}).then(tolUnit => {
+						tolUnit = tolUnit[Object.keys(tolUnit)[0]];
+						let idxT = toleranceUnitsLong.indexOf(tolUnit);
+
+						inquirer.prompt({
+							name: "tol",
+							message: "Enter common tolerance (in "+toleranceUnitsShort[idxT]+"):",
+							type: "number"
+						}).then(tol => {
+							tol = tol[Object.keys(tol)[0]];
+
+							inquirer.prompt({
+								name: "vol",
+								message: "Enter common max voltage (in V):",
+								type: "number"
+							}).then(maxV => {
+								maxV = maxV[Object.keys(maxV)[0]];
+
+								component.additional.maxVoltage = fixFloatRounding(maxV);
+								component.additional.maxVoltageUnit = "V";
+
+								component.additional.tolerance = fixFloatRounding(tol);
+								component.additional.toleranceUnit = toleranceUnitsShort[idxT];
+
+								let normCapTol;
+								if (tolUnit.indexOf("%") > -1) {
+									normCapTol = normCap*(tol/100);
+								} else {
+									normCapTol = tol*toleranceMults[idxT];
+								}
+								component.additional.normalizedTolerance = fixFloatRounding(normCapTol);
+								component.additional.normalizedToleranceUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
+
+								askN(0);
+							})
+						})	
+					})
+					break;
+				default:
+					return reject("Something went wrong, that component type is not currently supported :(");
+					break;
+			}
+		}
+
+		function askN(n) {
+			console.log("Group component "+(n+1)+" of "+numComponents);
+			switch (component.type) {
+				case cDefs.types.RESISTOR:
+					let resistanceUnitsLong = [];
+					let resistanceUnitsShort = [];
+					let resistanceMults = [];
+					cDefs.units[cDefs.types.RESISTOR].resistance.forEach(r => {
+						resistanceUnitsLong.push(r[0]);
+						resistanceUnitsShort.push(r[1]);
+						resistanceMults.push(r[2]);
+					})
+
+					inquirer.prompt({
+						name: "unit",
+						message: "Pick a resistance unit",
+						type: "list",
+						choices: resistanceUnitsLong
+					}).then(resUnit => {
+						resUnit = resUnit[Object.keys(resUnit)[0]];
+						let idxR = resistanceUnitsLong.indexOf(resUnit);
+
+						inquirer.prompt({
+							name: "res",
+							message: "Enter resistance (in "+resistanceUnitsShort[idxR]+"):",
+							type: "number"
+						}).then(res => {
+							res = res[Object.keys(res)[0]];
+
+							component.additional.value = fixFloatRounding(res);
+							component.additional.valueUnit = resistanceUnitsShort[idxR];
+
+							let normResist = res*resistanceMults[idxR];
+							component.additional.normalizedValue = fixFloatRounding(normResist);
+							component.additional.normalizedValueUnit = cDefs.units[cDefs.types.RESISTOR].normUnit;
+							
+							doneN(n);
+						})
+					})
+					break;
+				case cDefs.types.CAPACITOR:
+					let capUnitsLong = [];
+					let capUnitsShort = [];
+					let capMults = [];
+					cDefs.units[cDefs.types.CAPACITOR].capacitance.forEach(c => {
+						capUnitsLong.push(c[0]);
+						capUnitsShort.push(c[1]);
+						capMults.push(c[2]);
+					});
+
+					inquirer.prompt({
+						name: "unit",
+						message: "Pick a capacitance unit",
+						type: "list",
+						choices: capUnitsLong
+					}).then(capUnit => {
+						capUnit = capUnit[Object.keys(capUnit)[0]];
+						let idxC = capUnitsLong.indexOf(capUnit);
+
+						inquirer.prompt({
+							name: "cap",
+							message: "Enter capacitance (in "+capUnitsShort[idxC]+"):",
+							type: "number"
+						}).then(cap => {
+							cap = cap[Object.keys(cap)[0]];
+
+							component.additional.value = fixFloatRounding(cap);
+							component.additional.valueUnit = capUnitsShort[idxC];
+							
+							let normCap = cap*capMults[idxC];
+							component.additional.normalizedValue = fixFloatRounding(normCap);
+							component.additional.normalizedUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
+
+							doneN(n);
+						})
+					})
+					break;
+			}
+		}
+
+		function doneN(n) {
+			component.uuid = generateUUID(); //randomize the UUID
+			addComponent(component);
+			if (n >= numComponents-1) {
+				return resolve();
+			} else {
+				askN(n+1);
+			}
+		}
+
+	});
+}
 const componentSelector = () => {
 	/*
 	We want to know manufacturer, type (resistor, cap, inductor, misc)
@@ -862,7 +1176,7 @@ const componentSelector = () => {
 					})
 					break;
 				default:
-					return reject("Something went wrong :(");
+					return reject("Something went wrong, that component type is not currently supported :(");
 					break;
 			}
 		}
@@ -959,6 +1273,7 @@ const componentCompare = (a, b) => {
 }
 
 const addComponent = component => {
+	component = JSON.parse(JSON.stringify(component)); //break any relations when passed in
 	if (store.components.length == 0) { //nothing to compare so uhhh... return
 		store.components.push(component);
 		store.componentTotal++;
@@ -975,8 +1290,28 @@ const addComponent = component => {
 
 		if (matchFound) { //if same just add quantity
 			store.components[matchIdx].quantity += component.quantity;
+			console.log("Component was merged with existing component matching definitions");
 			if (store.components[matchIdx].assigned) {
-				console.log("UHHH COMPONENT IS ASSIGNED ALREADY TELL USER WHERE");
+				let uuid = store.components[matchIdx].uuid;
+
+				let found = false;
+				for (let z=0; z<store.boxes.length; z++) {
+					let box = store.boxes[z];
+					for (let i=0; i<box.sections.length; i++) {
+						for (let j=0; j<box.sections[i].assignments.length; j++) {
+							for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+								if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
+									console.log("This component was previously assigned and can be found at the following location:\nB"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1))
+
+									found = true;
+									break;
+								}
+							}
+							if (found) break;
+						}
+						if (found) break;
+					}
+				}
 			}
 		} else { //if different just add it into the list
 			store.components.push(component);
@@ -1014,6 +1349,11 @@ const assignComponents = () => {
 						availableBoxes.push([i, space]);
 					}
 				}
+				if (availableBoxes.length == 0) {
+					console.warn("No boxes available! Add one before trying to assign components");
+					return reject("No boxes available! Add one before trying to assign components");
+				}
+
 				console.log("Boxes available: "+availableBoxes.length);
 
 				let availBoxTitles = [];
@@ -1167,6 +1507,7 @@ const printComponent = component => {
 			info = "unknown info";
 			break;
 	}
+	info+= " of size '"+component.size+"'";
 	console.log("Component: "+component.type+" with "+info);
 	return;
 }
@@ -1267,7 +1608,7 @@ USER INPUT
 const main = () => {
 	const mChoices = ["Load Component Book", "New Component Book"];
 	inquirer.prompt({
-		name: "Choose an action:",
+		name: "Choose an action",
 		type: "list",
 		choices: mChoices
 	}).then(choice => {
@@ -1295,7 +1636,7 @@ const main = () => {
 					} else {
 						inquirer.prompt({
 							name: "fil",
-							message: "Select file:",
+							message: "Select file",
 							type: "list",
 							choices: validFiles
 						}).then(fil => {
@@ -1319,7 +1660,7 @@ const afterMain = () => {
 	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Assign Components", "Storage Info", "Save Data File", "Export Labels", "Exit"];
 	inquirer.prompt({
 		name: "mC",
-		message: "Choose an action:",
+		message: "Choose an action",
 		type: "list",
 		choices: mChoices
 	}).then(choice => {
@@ -1333,29 +1674,49 @@ const afterMain = () => {
 				afterMain();
 			});
 		} else if (choice == mChoices[1]) {
+			let multiComponentChoices = ["Individually", "As Group"];
 			inquirer.prompt({
-				name: "cAmnt",
-				message: "Enter amount of components to add:",
-				type: "number"
-			}).then(amnt => {
-				amnt = Number(amnt[Object.keys(amnt)[0]]);
+				name: "pType",
+				message: "Pick an option for how to assign multiple components",
+				type: "list",
+				choices: multiComponentChoices
+			}).then(mChoice => {
+				mChoice = mChoice[Object.keys(mChoice)[0]];
+				let groupAdd = mChoice.indexOf(multiComponentChoices[1]) > -1;
 
-				let addN = n => {
-					console.log("Component "+(n+1)+" of "+amnt);
-					componentSelector().then(component => {
-						addComponent(component); //Actually add it to store
-							
-						if (n >= amnt-1) {
-							console.log("Added "+amnt+" components successfully");
-							afterMain(); //wee we done
-						} else {
-							addN(n+1); //recursion gang
-						}
+				if (groupAdd) {
+					groupComponentSelector().then(() => {
+						console.log("Added components successfully");
+						afterMain();
 					}).catch(() => {
 						afterMain();
 					})
+				} else {
+					inquirer.prompt({
+						name: "cAmnt",
+						message: "Enter amount of components to add:",
+						type: "number"
+					}).then(amnt => {
+						amnt = Number(amnt[Object.keys(amnt)[0]]);
+
+							let addN = n => {
+								console.log("Component "+(n+1)+" of "+amnt);
+								componentSelector().then(component => {
+									addComponent(component); //Actually add it to store
+										
+									if (n >= amnt-1) {
+										console.log("Added "+amnt+" components successfully");
+										afterMain(); //wee we done
+									} else {
+										addN(n+1); //recursion gang
+									}
+								}).catch(() => {
+									afterMain();
+								})
+							}
+							addN(0);
+					})
 				}
-				addN(0);
 			})
 		} else if (choice == mChoices[2]) {
 			boxSelector().then(box => {
@@ -1393,6 +1754,8 @@ const afterMain = () => {
 		} else if (choice == mChoices[4]) {
 			assignComponents().then(() => {
 				afterMain();
+			}).catch(() => {
+				afterMain();
 			})
 		} else if (choice == mChoices[5]) {
 			console.log("\n~~~~ Storage Info ~~~");
@@ -1427,8 +1790,9 @@ const afterMain = () => {
 					let box = store.boxes[i];
 					console.log("Box '"+box.title+"' has "+box.sections.length+" sections");
 					for (let j=0; j<box.sections.length; j++) {
-						console.log("\t"+box.sections[i].type+": W="+box.sections[i].width+", H="+box.sections[i].height);
+						console.log("\t"+box.sections[j].type+": W="+box.sections[j].width+", H="+box.sections[j].height);
 					}
+					printBox(box);
 				}
 			}
 			console.log("\n~~~~ End Storage Info ~~~~");

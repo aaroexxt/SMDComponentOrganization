@@ -11,6 +11,10 @@ const componentTypes = {
 	MECHANICAL: "Mechanical",
 	OTHER: "Other" //done
 };
+const groupComponentTypes = {
+	RESISTOR: "Resistor",
+	CAPACITOR: "Capacitor"
+}
 const SMDpackageSizes = {
 	S0805: "0805",
 	S0603: "0603",
@@ -189,6 +193,7 @@ const crystalUnits = {
 
 var mExports = {
 	types: componentTypes,
+	groupTypes: groupComponentTypes,
 	smdSizes: SMDpackageSizes,
 	ICPackages: ICPackages,
 	manufacturers: manufacturers,
