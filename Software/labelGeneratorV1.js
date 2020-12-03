@@ -170,16 +170,16 @@ const exportImages = dir => { //Will export images from store
 			((st == "small")?smallLabelComponents:(st == "medium")?medLabelComponents:largeLabelComponents).push(componentPrintInfo[i]);
 		}
 		//Small
-		let labelsPerRowSmall = Math.floor(canvasWidthPx/(componentLabelSmallDim[1]+inToPx(0.066)));
-		let labelsPerSheetSmall = labelsPerRowSmall*Math.floor(canvasHeightPx/(componentLabelSmallDim[0]+inToPx(0.1)));
+		let labelsPerRowSmall = Math.floor(canvasWidthPx/(componentLabelSmallDim[1]+inToPx(0.025)));
+		let labelsPerSheetSmall = labelsPerRowSmall*Math.floor(canvasHeightPx/(componentLabelSmallDim[0]+inToPx(0.075)));
 		let labelSheetsSmall = Math.ceil(smallLabelComponents.length/labelsPerSheetSmall);
 		//Med
-		let labelsPerRowMedium = Math.floor(canvasWidthPx/(componentLabelMediumDim[1]+inToPx(0.066)));
-		let labelsPerSheetMedium = labelsPerRowMedium*Math.floor(canvasHeightPx/(componentLabelMediumDim[0]+inToPx(0.1)));
+		let labelsPerRowMedium = Math.floor(canvasWidthPx/(componentLabelMediumDim[1]+inToPx(0.025)));
+		let labelsPerSheetMedium = labelsPerRowMedium*Math.floor(canvasHeightPx/(componentLabelMediumDim[0]+inToPx(0.075)));
 		let labelSheetsMedium = Math.ceil(mediumLabelComponents.length/labelsPerSheetMedium);
 		//Large
-		let labelsPerRowLarge = Math.floor(canvasWidthPx/(componentLabelLargeDim[1]+inToPx(0.066)));
-		let labelsPerSheetLarge = labelsPerRowLarge*Math.floor(canvasHeightPx/(componentLabelLargeDim[0]+inToPx(0.1)));
+		let labelsPerRowLarge = Math.floor(canvasWidthPx/(componentLabelLargeDim[1]+inToPx(0.025)));
+		let labelsPerSheetLarge = labelsPerRowLarge*Math.floor(canvasHeightPx/(componentLabelLargeDim[0]+inToPx(0.075)));
 		let labelSheetsLarge = Math.ceil(largeLabelComponents.length/labelsPerSheetLarge);
 
 		let compIdx = 0;
@@ -211,10 +211,10 @@ const exportImages = dir => { //Will export images from store
 					const codeWidth = ctx.measureText(code).width;
 					ctx.fillText(code, ((componentLabelSmallDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
 
-					x+=componentLabelSmallDim[1]+inToPx(0.05);
+					x+=componentLabelSmallDim[1]+inToPx(0.025);
 					if (x/componentLabelSmallDim[1] > labelsPerRowSmall) {
 						x = inToPx(0.066);
-						y+=componentLabelSmallDim[0]+inToPx(0.066);
+						y+=componentLabelSmallDim[0]+inToPx(0.025);
 					}
 					compIdx++;
 				}
@@ -251,10 +251,10 @@ const exportImages = dir => { //Will export images from store
 					const codeWidth = ctx.measureText(code).width;
 					ctx.fillText(code, ((componentLabelMediumDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
 
-					x+=componentLabelMediumDim[1]+inToPx(0.05);
+					x+=componentLabelMediumDim[1]+inToPx(0.025);
 					if (x/componentLabelMediumDim[1] > labelsPerRowMedium) {
 						x = inToPx(0.066);
-						y+=componentLabelMediumDim[0]+inToPx(0.066);
+						y+=componentLabelMediumDim[0]+inToPx(0.025);
 					}
 					compIdx++;
 				}
@@ -292,10 +292,10 @@ const exportImages = dir => { //Will export images from store
 					const codeWidth = ctx.measureText(code).width;
 					ctx.fillText(code, ((componentLabelLargeDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
 
-					x+=componentLabelLargeDim[1]+inToPx(0.05);
+					x+=componentLabelLargeDim[1]+inToPx(0.025);
 					if (x/componentLabelLargeDim[1] > labelsPerRowLarge) {
 						x = inToPx(0.066);
-						y+=componentLabelLargeDim[0]+inToPx(0.066);
+						y+=componentLabelLargeDim[0]+inToPx(0.025);
 					}
 					compIdx++;
 				}
