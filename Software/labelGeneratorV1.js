@@ -75,7 +75,7 @@ const exportImages = dir => { //Will export images from store
 
 		let boxPrintInfo = [];
 		for (let i=0; i<store.boxes.length; i++) { //Generate box labels
-			boxPrintInfo.push([store.boxes[i].title, store.boxes[i].description]);
+			boxPrintInfo.push([store.boxes[i].title, store.boxes[i].description, (i+1)]);
 		}
 
 		let boxesPerSheet = Math.floor(canvasHeightPx/(heightBoxLabel+inToPx(0.1)));
@@ -94,7 +94,8 @@ const exportImages = dir => { //Will export images from store
 				canvasRoundRect(ctx, 20, y, canvasWidthPx-40, heightBoxLabel, 50, false, true);
 				
 				let title = boxPrintInfo[boxIdx][0].substring(0, 16).trim();
-				let desc = boxPrintInfo[boxIdx][1].substring(0, 50).trim();				
+				let desc = boxPrintInfo[boxIdx][1].substring(0, 50).trim();	
+				let bn = ("#"+boxPrintInfo[boxIdx][2]).trim();
 
 				ctx.font = "bold 125px Helvetica";
 				const titleWidth = ctx.measureText(title).width;
@@ -103,6 +104,10 @@ const exportImages = dir => { //Will export images from store
 				ctx.font = "75px Helvetica";
 				const descWidth = ctx.measureText(desc).width;
 				ctx.fillText(desc, (canvasWidthPx-20-descWidth)/2, y+inToPx(0.75));
+
+				ctx.font = "bold 50px Helvetica";
+				const bnWidth = ctx.measureText(bn).width;
+				ctx.fillText(bn, canvasWidthPx-50-bnWidth, y+inToPx(0.1));
 
 				y+=heightBoxLabel+inToPx(0.1);
 				boxIdx++;
