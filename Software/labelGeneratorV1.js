@@ -8,6 +8,8 @@
 - finish component additional asking for other types (diode etc)
 - unassign function
 - 'auto' unit selection which will convert to best possible unit choice
+- check if component is valid before writing
+- activate/deactivate boxes
 */
 
 
@@ -698,15 +700,6 @@ const groupComponentSelector = () => {
 								component.additional.tolerance = fixFloatRounding(tol);
 								component.additional.toleranceUnit = toleranceUnitsShort[idxT];
 
-								let normCapTol;
-								if (tolUnit.indexOf("%") > -1) {
-									normCapTol = normCap*(tol/100);
-								} else {
-									normCapTol = tol*toleranceMults[idxT];
-								}
-								component.additional.normalizedTolerance = fixFloatRounding(normCapTol);
-								component.additional.normalizedToleranceUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
-
 								askN(0);
 							})
 						})	
@@ -790,6 +783,34 @@ const groupComponentSelector = () => {
 							let normCap = cap*capMults[idxC];
 							component.additional.normalizedValue = fixFloatRounding(normCap);
 							component.additional.normalizedUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
+
+
+							let toleranceUnitsLong = [];
+							let toleranceUnitsShort = [];
+							let toleranceMults = [];
+							cDefs.units[cDefs.types.CAPACITOR].tolerance.forEach(t => {
+								toleranceUnitsLong.push(t[0]);
+								toleranceUnitsShort.push(t[1]);
+								if (typeof t[2] == "undefined") {
+									toleranceMults.push(0);
+								} else {
+									toleranceMults.push(t[2]);
+								}
+								
+							})
+
+							let tolUnit = component.additional.toleranceUnit;
+							let tol = component.additional.tolerance;
+							let idxT = toleranceUnitsLong.indexOf(tolUnit);
+
+							let normCapTol;
+							if (tolUnit.indexOf("%") > -1) {
+								normCapTol = normCap*(tol/100);
+							} else {
+								normCapTol = tol*toleranceMults[idxT];
+							}
+							component.additional.normalizedTolerance = fixFloatRounding(normCapTol);
+							component.additional.normalizedToleranceUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
 
 							doneN(n);
 						})
@@ -1385,7 +1406,23 @@ const assignComponents = () => {
 					printBox(box);
 
 					let assignComponent = () => {
-						let methodChoices = ["AutoAssign", "Manually"];
+						let methodChoices = ["AutoAssign", "Manually", "Cancel"];
+						let sectionChoices = [];
+						for (let i=0; i<box.sections.length; i++) {
+							let sectionAvailable = false;
+							for (let j=0; j<box.sections[i].assignments.length; j++) {
+								for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+									if (box.sections[i].assignments[j][b] == "") {
+										sectionAvailable = true;
+										sectionChoices.push([i, methodChoices.length]); //push index of section and index of choice
+										methodChoices.push("AutoAssign to Section "+(i+1)+" of type '"+box.sections[i].type+"'");
+										break;
+									}
+								}
+								if (sectionAvailable) break;
+							}
+							
+						}
 						inquirer.prompt({
 							name: "aSel",
 							message: "Pick assignment method",
@@ -1482,6 +1519,48 @@ const assignComponents = () => {
 										})
 									})
 								})
+							} else if (method == methodChoices[2]) { //just cancel
+								return resolve();
+							} else {
+								let methodIdx = methodChoices.indexOf(method);
+								let assigned = false;
+								for (let i=0; i<sectionChoices.length; i++) {
+									if (sectionChoices[i][1] == methodIdx) {
+										let sectionIdx = sectionChoices[i][0];
+
+										for (let j=0; j<box.sections[sectionIdx].assignments.length; j++) {
+											for (let b=0; b<box.sections[sectionIdx].assignments[j].length; b++) {
+												/*
+												Steps to assign box UUIDs
+
+												1) Put component UUID in box assignment field
+												2) Set "assigned" flag in component
+												*/
+												if (box.sections[sectionIdx].assignments[j][b] == "") {
+													store.boxes[bIdx].sections[sectionIdx].assignments[j][b] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
+													store.components[cAssign[n][0]].assigned = true;
+													console.log("AutoAssigned in section "+(sectionIdx+1)+"to row="+(j+1)+", col="+(b+1));
+
+													assigned = true;
+													break;
+												}
+											}
+											if (assigned) break;
+										}
+										if (assigned) break;
+									}
+								}
+
+								if (assigned) {
+									if (n >= cAssign.length-1) {
+										return resolve();
+									} else {
+										assignN(n+1);
+									}
+								} else {
+									console.log("Something went wrong... no free space in section? Running component again");
+									assignN(n);
+								}
 							}
 						})
 
@@ -1544,7 +1623,7 @@ const printBox = box => {
 			let printStr = "|";
 			for (let b=0; b<am[j].length; b++) {
 				if (am[j][b] == "") {
-					printStr += " EMPTY\t|";
+					printStr += "   *\t|";
 				} else {
 					let component = componentLookup(am[j][b]); //get component info
 
@@ -1764,6 +1843,22 @@ const afterMain = () => {
 			})
 		} else if (choice == mChoices[5]) {
 			console.log("\n~~~~ Storage Info ~~~");
+			console.log("Total Box Count: "+store.boxTotal);
+			if (store.boxTotal > 0) {
+				console.log("~~~~~\nBox Breakdown:");
+				//name sectionCount
+				//	sectionType: width=w, height=h
+
+				for (let i=0; i<store.boxes.length; i++) {
+					let box = store.boxes[i];
+					console.log("Box '"+box.title+"' has "+box.sections.length+" sections");
+					for (let j=0; j<box.sections.length; j++) {
+						console.log("\t"+box.sections[j].type+": W="+box.sections[j].width+", H="+box.sections[j].height);
+					}
+					printBox(box);
+					console.log("\n");
+				}
+			}
 			console.log("Total Component Count: "+store.componentTotal);
 			console.log("~~~~~\nComponent breakdown:\nType\t\tEntryCount\tComponentCount");
 			let counts = [];
@@ -1783,22 +1878,6 @@ const afterMain = () => {
 
 			for (let i=0; i<counts.length; i++) {
 				console.log(counts[i][0]+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]); //another funky fresh oneliner from yours truly
-			}
-			console.log("\n");
-			console.log("Total Box Count: "+store.boxTotal);
-			if (store.boxTotal > 0) {
-				console.log("~~~~~\nBox Breakdown:");
-				//name sectionCount
-				//	sectionType: width=w, height=h
-
-				for (let i=0; i<store.boxes.length; i++) {
-					let box = store.boxes[i];
-					console.log("Box '"+box.title+"' has "+box.sections.length+" sections");
-					for (let j=0; j<box.sections.length; j++) {
-						console.log("\t"+box.sections[j].type+": W="+box.sections[j].width+", H="+box.sections[j].height);
-					}
-					printBox(box);
-				}
 			}
 			console.log("\n~~~~ End Storage Info ~~~~");
 
