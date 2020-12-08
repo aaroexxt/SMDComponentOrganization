@@ -425,7 +425,8 @@ const boxSelector = () => {
 
 	return new Promise((resolve, reject) => {
 		var box = {
-			sections: []
+			sections: [],
+			selectable: true
 		}
 		inquirer.prompt({
 			name: "title",
@@ -1371,7 +1372,7 @@ const assignComponents = () => {
 					let filled = true;
 					let box = store.boxes[i];
 					let space = getSpaceInBox(box);
-					if (space > 0) {
+					if (space > 0 && box.selectable) { //is it open and selectable?
 						availableBoxes.push([i, space]);
 					}
 				}
@@ -1683,7 +1684,42 @@ const getSpaceInBox = box => {
 	}
 
 	return s;
-} 
+}
+
+const actDeactBoxes = () => {
+	return new Promise((resolve, reject) => {
+		console.log("Box selectability utility for assigning components (* = not selectable)");
+
+		let bActDeact = () => {
+			let bChoices = ["Exit"];
+			let bInf = [-1];
+			for (let i=0; i<store.boxes.length; i++) {
+				let box = store.boxes[i];
+				let space = getSpaceInBox(box);
+				bChoices.push((box.selectable?"":"* ") + "'"+box.title+"'"+", space="+space);
+				bInf.push(i);
+			}
+
+			inquirer.prompt({
+				name: "bAct",
+				message: "Select box to toggle selectablility",
+				type: "rawlist",
+				choices: bChoices
+			}).then(bChoice => {
+				bChoice = bChoice[Object.keys(bChoice)[0]];
+
+				if (bChoice == bChoices[0]) {
+					return resolve();
+				} else {
+					let bIdx = bInf[bChoices.indexOf(bChoice)];
+					store.boxes[bIdx].selectable = !store.boxes[bIdx].selectable;
+					bActDeact();
+				}
+			})
+		}
+		bActDeact();
+	})
+}
 
 /*
 USER INPUT
@@ -1741,7 +1777,7 @@ const main = () => {
 }
 
 const afterMain = () => {
-	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Assign Components", "Storage Info", "Save Data File", "Export Labels", "Exit"];
+	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Assign Components", "Edit Box Selectability", "Storage Info", "Save Data File", "Export Labels", "Exit"];
 	inquirer.prompt({
 		name: "mC",
 		message: "Choose an action",
@@ -1842,6 +1878,12 @@ const afterMain = () => {
 				afterMain();
 			})
 		} else if (choice == mChoices[5]) {
+			actDeactBoxes().then(() => {
+				afterMain();
+			}).catch(() => {
+				afterMain();
+			})
+		} else if (choice == mChoices[6]) {
 			console.log("\n~~~~ Storage Info ~~~");
 			console.log("Total Box Count: "+store.boxTotal);
 			if (store.boxTotal > 0) {
@@ -1882,7 +1924,7 @@ const afterMain = () => {
 			console.log("\n~~~~ End Storage Info ~~~~");
 
 			afterMain(); //return to main
-		} else if (choice == mChoices[6]) {
+		} else if (choice == mChoices[7]) {
 			console.log("Save to directory:");
 			
 			dirPicker(".").then(dir => {
@@ -1927,7 +1969,7 @@ const afterMain = () => {
 					}
 				});
 			});
-		} else if (choice == mChoices[7]) {
+		} else if (choice == mChoices[8]) {
 			console.log("Pick save directory for the images:");
 			dirPicker(".").then(dir => {
 				exportImages(dir).then(() => {
