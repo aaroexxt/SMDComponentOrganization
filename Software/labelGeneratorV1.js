@@ -38,8 +38,8 @@ const inToPx = uIn => {
 //Label size defs
 const heightBoxLabel = inToPx(1.25);
 const componentLabelSmallDim = [inToPx(0.35), inToPx(0.6)]; //height, width in px
-const componentLabelMediumDim = [inToPx(0.5), inToPx(0.8)]; //NOT TESTED YET
-const componentLabelLargeDim = [inToPx(0.75), inToPx(0.75)]; //NOT TESTED YET
+const componentLabelMediumDim = [inToPx(0.4), inToPx(1.32)]; //NOT TESTED YET
+const componentLabelLargeDim = [inToPx(1.4), inToPx(1.32)]; //NOT TESTED YET
 
 
 
@@ -1721,6 +1721,36 @@ const actDeactBoxes = () => {
 	})
 }
 
+const delBoxSelector = () => {
+	return new Promise((resolve, reject) => {
+		let bChoices = ["Exit"];
+		let bInf = [-1];
+		for (let i=0; i<store.boxes.length; i++) {
+			let box = store.boxes[i];
+			let space = getSpaceInBox(box);
+			bChoices.push((box.selectable?"":"* ") + "'"+box.title+"'"+", space="+space);
+			bInf.push(i);
+		}
+
+		inquirer.prompt({
+			name: "bDel",
+			message: "Select box to delete",
+			type: "rawlist",
+			choices: bChoices
+		}).then(bChoice => {
+			bChoice = bChoice[Object.keys(bChoice)[0]];
+
+			if (bChoice == bChoices[0]) {
+				return resolve();
+			} else {
+				let bIdx = bInf[bChoices.indexOf(bChoice)];
+				store.boxes.splice(bIdx, 1); //actually remove it
+				return resolve();
+			}
+		})
+	});
+}
+
 /*
 USER INPUT
 */
@@ -1777,7 +1807,7 @@ const main = () => {
 }
 
 const afterMain = () => {
-	const mChoices = ["Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes", "Assign Components", "Edit Box Selectability", "Storage Info", "Save Data File", "Export Labels", "Exit"];
+	const mChoices = ["Add (Component, Box)", "Delete (Component, Box)", "Assign (Component)", "Edit Selectability (Box)", "Storage Info", "Save Data File", "Export Labels", "Exit"];
 	inquirer.prompt({
 		name: "mC",
 		message: "Choose an action",
@@ -1786,104 +1816,23 @@ const afterMain = () => {
 	}).then(choice => {
 		choice = choice[Object.keys(choice)[0]];
 
-		if (choice == mChoices[0]) {
-			componentSelector().then(component => {
-				addComponent(component); //Actually add it to store
-				afterMain();
-			}).catch(() => {
-				afterMain();
-			});
-		} else if (choice == mChoices[1]) {
-			let multiComponentChoices = ["Individually", "As Group"];
-			inquirer.prompt({
-				name: "pType",
-				message: "Pick an option for how to assign multiple components",
-				type: "list",
-				choices: multiComponentChoices
-			}).then(mChoice => {
-				mChoice = mChoice[Object.keys(mChoice)[0]];
-				let groupAdd = mChoice.indexOf(multiComponentChoices[1]) > -1;
-
-				if (groupAdd) {
-					groupComponentSelector().then(() => {
-						console.log("Added components successfully");
-						afterMain();
-					}).catch(() => {
-						afterMain();
-					})
-				} else {
-					inquirer.prompt({
-						name: "cAmnt",
-						message: "Enter amount of components to add:",
-						type: "number"
-					}).then(amnt => {
-						amnt = Number(amnt[Object.keys(amnt)[0]]);
-
-							let addN = n => {
-								console.log("Component "+(n+1)+" of "+amnt);
-								componentSelector().then(component => {
-									addComponent(component); //Actually add it to store
-										
-									if (n >= amnt-1) {
-										console.log("Added "+amnt+" components successfully");
-										afterMain(); //wee we done
-									} else {
-										addN(n+1); //recursion gang
-									}
-								}).catch(() => {
-									afterMain();
-								})
-							}
-							addN(0);
-					})
-				}
-			})
+		if (choice == mChoices[0]) { //add
+			addComponentMenu();
+		} else if (choice == mChoices[1]) { //delete
+			deleteComponentMenu();
 		} else if (choice == mChoices[2]) {
-			boxSelector().then(box => {
-				store.boxes.push(box); //add box!
-				store.boxTotal++;
-				console.log("Added box successfully");
-				afterMain();
-			})
-		} else if (choice == mChoices[3]) {
-			inquirer.prompt({
-				name: "cAmnt",
-				message: "Enter amount of boxes to add:",
-				type: "number"
-			}).then(amnt => {
-				amnt = Number(amnt[Object.keys(amnt)[0]]);
-
-				let addN = n => {
-					console.log("Box "+(n+1)+" of "+amnt);
-					boxSelector().then(box => {
-						store.boxes.push(box); //add box!
-						store.boxTotal++;
-							
-						if (n >= amnt-1) {
-							console.log("Added "+amnt+" boxes successfully");
-							afterMain(); //wee we done
-						} else {
-							addN(n+1); //recursion gang
-						}
-					}).catch(() => {
-						afterMain();
-					})
-				}
-				addN(0);
-			})
-		} else if (choice == mChoices[4]) {
 			assignComponents().then(() => {
 				afterMain();
 			}).catch(() => {
 				afterMain();
 			})
-		} else if (choice == mChoices[5]) {
+		} else if (choice == mChoices[3]) {
 			actDeactBoxes().then(() => {
 				afterMain();
 			}).catch(() => {
 				afterMain();
 			})
-		} else if (choice == mChoices[6]) {
+		} else if (choice == mChoices[4]) {
 			console.log("\n~~~~ Storage Info ~~~");
 			console.log("Total Box Count: "+store.boxTotal);
 			if (store.boxTotal > 0) {
@@ -1924,7 +1873,7 @@ const afterMain = () => {
 			console.log("\n~~~~ End Storage Info ~~~~");
 
 			afterMain(); //return to main
-		} else if (choice == mChoices[7]) {
+		} else if (choice == mChoices[5]) {
 			console.log("Save to directory:");
 			
 			dirPicker(".").then(dir => {
@@ -1969,7 +1918,7 @@ const afterMain = () => {
 					}
 				});
 			});
-		} else if (choice == mChoices[8]) {
+		} else if (choice == mChoices[6]) {
 			console.log("Pick save directory for the images:");
 			dirPicker(".").then(dir => {
 				exportImages(dir).then(() => {
@@ -1980,6 +1929,131 @@ const afterMain = () => {
 					afterMain();
 				})
 			});
+		} else if (choice == mChoices[7]) {
+			console.log("Exiting...");
+		}
+	})
+}
+
+const addComponentMenu = () => {
+	let mChoices = ["Back", "Add Component (Oneshot)", "Add Multiple Components", "Add Box (Oneshot)", "Add Multiple Boxes"];
+	inquirer.prompt({
+		name: "cAdd",
+		type: "list",
+		choices: mChoices,
+		message: "Choose an action"
+	}).then(choice => {
+		choice = choice[Object.keys(choice)[0]];
+
+		if (choice == mChoices[0]) {
+			afterMain();
+		} else if (choice == mChoices[1]) {
+			componentSelector().then(component => {
+				addComponent(component); //Actually add it to store
+				afterMain();
+			}).catch(() => {
+				afterMain();
+			});
+		} else if (choice == mChoices[2]) {
+			let multiComponentChoices = ["Individually", "As Group"];
+			inquirer.prompt({
+				name: "pType",
+				message: "Pick an option for how to assign multiple components",
+				type: "list",
+				choices: multiComponentChoices
+			}).then(mChoice => {
+				mChoice = mChoice[Object.keys(mChoice)[0]];
+				let groupAdd = mChoice.indexOf(multiComponentChoices[1]) > -1;
+
+				if (groupAdd) {
+					groupComponentSelector().then(() => {
+						console.log("Added components successfully");
+						afterMain();
+					}).catch(() => {
+						afterMain();
+					})
+				} else {
+					inquirer.prompt({
+						name: "cAmnt",
+						message: "Enter amount of components to add:",
+						type: "number"
+					}).then(amnt => {
+						amnt = Number(amnt[Object.keys(amnt)[0]]);
+
+						let addN = n => {
+							console.log("Component "+(n+1)+" of "+amnt);
+							componentSelector().then(component => {
+								addComponent(component); //Actually add it to store
+									
+								if (n >= amnt-1) {
+									console.log("Added "+amnt+" components successfully");
+									afterMain(); //wee we done
+								} else {
+									addN(n+1); //recursion gang
+								}
+							}).catch(() => {
+								afterMain();
+							})
+						}
+						addN(0);
+					})
+				}
+			})
+		} else if (choice == mChoices[3]) {
+			boxSelector().then(box => {
+				store.boxes.push(box); //add box!
+				store.boxTotal++;
+				console.log("Added box successfully");
+				afterMain();
+			})
+		} else if (choice == mChoices[4]) {
+			inquirer.prompt({
+				name: "cAmnt",
+				message: "Enter amount of boxes to add:",
+				type: "number"
+			}).then(amnt => {
+				amnt = Number(amnt[Object.keys(amnt)[0]]);
+
+				let addN = n => {
+					console.log("Box "+(n+1)+" of "+amnt);
+					boxSelector().then(box => {
+						store.boxes.push(box); //add box!
+						store.boxTotal++;
+							
+						if (n >= amnt-1) {
+							console.log("Added "+amnt+" boxes successfully");
+							afterMain(); //wee we done
+						} else {
+							addN(n+1); //recursion gang
+						}
+					}).catch(() => {
+						afterMain();
+					})
+				}
+				addN(0);
+			})
+		}
+	})
+}
+
+const deleteComponentMenu = () => {
+	let mChoices = ["Back", "Delete Box"];
+	inquirer.prompt({
+		name: "dMenu",
+		message: "Pick an action",
+		choices: mChoices,
+		type: "list"
+	}).then(choice => {
+		choice = choice[Object.keys(choice)[0]];
+
+		if (choice == mChoices[0]) {
+			afterMain();
+		} else if (choice == mChoices[1]) {
+			delBoxSelector().then(() => {
+				afterMain();
+			}).catch(() => {
+				afterMain();
+			})
 		}
 	})
 }
