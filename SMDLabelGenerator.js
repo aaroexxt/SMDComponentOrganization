@@ -41,7 +41,7 @@ const componentLabelSmallDim = [inToPx(0.35), inToPx(0.6)]; //height, width in p
 const componentLabelMediumDim = [inToPx(0.4), inToPx(1.32)]; //NOT TESTED YET
 const componentLabelLargeDim = [inToPx(1.4), inToPx(1.32)]; //NOT TESTED YET
 
-
+const strictComponentComparison = false; //enables strict checks like matching voltage range for capacitors in comparison
 
 var store = {
 	boxes: [],
@@ -136,6 +136,9 @@ const exportImages = dir => { //Will export images from store
 				case cDefs.types.CRYSTAL:
 					info = component.additional.frequency+component.additional.frequencyUnit;
 					break;
+				case cDefs.types.LED:
+					info = component.additional.color;
+					break;
 				default:
 					info = "Unknown";
 					break;
@@ -207,13 +210,19 @@ const exportImages = dir => { //Will export images from store
 
 					canvasRoundRect(ctx, x, y, componentLabelSmallDim[1], componentLabelSmallDim[0], 10, false, true);
 					
-					let value = component.value.substring(0, 6).trim();
-					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();				
+					let value = component.value.substring(0, 10).trim();				
 
-					ctx.font = "bold 50px Helvetica";
-					const valueWidth = ctx.measureText(value).width;
-					ctx.fillText(value, ((componentLabelSmallDim[1]-valueWidth)/2)+x, y+inToPx(0.025));
+					let maxSize = 50;
+					let fontSize = 25;
+					while (ctx.measureText(value).width < componentLabelSmallDim[1]-15 && fontSize <= maxSize) {
+						ctx.font = "bold "+fontSize+"px Helvetica";
+						fontSize++;
+					}
+					let valueWidth = ctx.measureText(value).width;
+					
+					ctx.fillText(value, ((componentLabelSmallDim[1]-valueWidth)/2)+x, y+inToPx(0.025)+(50-fontSize)/2);
 
+					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();
 					ctx.font = "25px Helvetica";
 					const codeWidth = ctx.measureText(code).width;
 					ctx.fillText(code, ((componentLabelSmallDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
@@ -1145,6 +1154,34 @@ const componentSelector = () => {
 						});
 					})
 					break;
+				case cDefs.types.LED:
+					component.type = cDefs.types.LED;
+					inquirer.prompt({
+						name: "col",
+						message: "Pick color:",
+						type: "list",
+						choices: cDefs.ledColors
+					}).then(color => {
+						color = color[Object.keys(color)[0]];
+
+						if (color.toLowerCase().indexOf("other") > -1) { //"other"
+							inquirer.prompt({
+								name: "col2",
+								message: "Enter a color:",
+								type: "input"
+							}).then(customColor => {
+								customColor = customColor[Object.keys(customColor)[0]];
+								component.additional.color = customColor;
+
+								return resolve(component);
+							})
+						} else {
+							component.additional.color = color;
+
+							return resolve(component);
+						}
+					})
+					break;
 				case cDefs.types.CRYSTAL:
 					component.type = cDefs.types.CRYSTAL;
 					inquirer.prompt({
@@ -1276,18 +1313,21 @@ const componentCompare = (a, b) => {
 	let bAdd = b.additional;
 	switch (a.type) { //Now compare the "additional" fields
 		case cDefs.types.RESISTOR:
-			if (aAdd.tolerance != bAdd.tolerance) return false;
+			if (aAdd.tolerance != bAdd.tolerance && strictComponentComparison) return false;
 			if (aAdd.normalizedValue != bAdd.normalizedValue) return false;
 			break;
 		case cDefs.types.CAPACITOR:
-			if (aAdd.normalizedTolerance != bAdd.normalizedTolerance) return false;
+			if (aAdd.normalizedTolerance != bAdd.normalizedTolerance && strictComponentComparison) return false;
 			if (aAdd.normalizedValue != bAdd.normalizedValue) return false;
-			if (aAdd.maxVoltage != bAdd.maxVoltage) return false;
+			if (aAdd.maxVoltage != bAdd.maxVoltage && strictComponentComparison) return false;
 			break;
 		case cDefs.types.OTHER:
 		case cDefs.types.IC:
-			if (aAdd.identifier != bAdd.identifier) return false;
+			if (aAdd.identifier.toLowerCase() != bAdd.identifier.toLowerCase()) return false;
 			//Description can slide
+			break;
+		case cDefs.types.LED:
+			if (aAdd.color.toLowerCase() != bAdd.color.toLowerCase()) return false;
 			break;
 		case cDefs.types.CRYSTAL:
 			if (aAdd.frequency != bAdd.frequency) return false;
@@ -1588,6 +1628,9 @@ const printComponent = component => {
 		case cDefs.types.CRYSTAL:
 			info = "frequency "+component.additional.frequency+component.additional.frequencyUnit;
 			break;
+		case cDefs.types.LED:
+			info = "color "+component.additional.color;
+			break;
 		default:
 			info = "unknown info";
 			break;
@@ -1641,11 +1684,15 @@ const printBox = box => {
 						case cDefs.types.CRYSTAL:
 							info = component.additional.frequency+component.additional.frequencyUnit;
 							break;
+						case cDefs.types.LED:
+							info = component.additional.color;
+							break;
 						default:
 							info = "*";
 							break;
 					}
 					info = info.substring(0,7);
+					let iLen = info.length;
 					let padLength = Math.floor((7-info.length)/2); //do we need to pad it out
 					if (padLength >= 1) {
 						for (let i=0; i<padLength; i++) {
@@ -1653,7 +1700,7 @@ const printBox = box => {
 						}
 					}
 
-					printStr += info+"\t|";
+					printStr += info+((iLen == 7)?"|":"\t|");
 				}
 			}
 			console.log(printStr);
@@ -1770,7 +1817,7 @@ const main = () => {
 				getFilesInDir(dir).then(files => {
 					let validFiles = [];
 					for (let i=0; i<files.length; i++) {
-						if (files[i].toLowerCase().indexOf(".json") > -1) {
+						if (files[i].toLowerCase().indexOf(".json") > -1 && files[i].indexOf("package.json") == -1) {
 							validFiles.push(files[i])
 						}
 					}

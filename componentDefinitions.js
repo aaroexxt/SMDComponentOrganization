@@ -2,12 +2,9 @@
 const componentTypes = {
 	RESISTOR: "Resistor", //done
 	CAPACITOR: "Capacitor", //done
-	TRANSISTOR: "Transistor",
-	DIODE: "Diode",
-	INDUCTOR: "Inductor",
 	CRYSTAL: "Crystal", //done
-	LED: "LED",
-	IC: "IC", //done
+	LED: "LED", //done
+	IC: "IC/Transistor/Diode/Inductor", //done
 	MECHANICAL: "Mechanical",
 	OTHER: "Other" //done
 };
@@ -80,6 +77,10 @@ const ICPackages = {
 		"LCCC",
 		"DLCC",
 		"PLCC"
+	],
+	"LandGridArray (LLGA, LGA, etc)": [
+		"LGA",
+		"LLGA"
 	],
 	"FlatPack (TQFP, VQFN, etc)": [
 		"CFP",
@@ -156,7 +157,10 @@ const ICPackages = {
 const manufacturers = [
 	"Murata",
 	"Yageo",
-	"TI"
+	"Texas Instruments",
+	"ON Semiconductor",
+	"ST Microelectronics",
+	"Microchip Technology"
 ]
 
 const resistorUnits = {
@@ -191,12 +195,27 @@ const crystalUnits = {
 	]
 }
 
+const ledColors = [
+	"Other",
+	"Red",
+	"RedDiffused",
+	"Green",
+	"GreenDiffused",
+	"Blue",
+	"BlueDiffused",
+	"Yellow",
+	"YellowDiffused",
+	"Orange",
+	"OrangeDiffused"
+]
+
 var mExports = {
 	types: componentTypes,
 	groupTypes: groupComponentTypes,
 	smdSizes: SMDpackageSizes,
 	ICPackages: ICPackages,
 	manufacturers: manufacturers,
+	ledColors: ledColors,
 	units: {}
 }
 mExports.units[componentTypes.RESISTOR] = resistorUnits;
