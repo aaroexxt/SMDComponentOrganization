@@ -1,0 +1,105 @@
+SMDComponentOrganization V2
+By Aaron Becker
+
+Report Generated On 1/30/2021, 4:57:15 AM
+Project(s) included in report:
+	2x BOM_controllerMasterV2
+	2x BOM_ZenithController
+
+----------------------
+
+You have enough of the following components in boxes (remaining amount):
+
+42x 10kΩ size 0603 Resistor
+44x 330Ω size 0603 Resistor
+46x 4.7μF size 0603 Capacitor
+46x 4pF size 0603 Capacitor
+45x 100nF size 0603 Capacitor
+26x 100kΩ size 0603 Resistor
+36x 10μF size 0603 Capacitor
+44x 1kΩ size 0603 Resistor
+42x 1μF size 0603 Capacitor
+44x 2.2kΩ size 0603 Resistor
+46x 2.2μF size 0603 Capacitor
+46x 33Ω size 0603 Resistor
+46x 470Ω size 0603 Resistor
+46x 5.1kΩ size 0603 Resistor
+46x 5.6Ω size 0603 Resistor
+44x 68Ω size 0603 Resistor
+46x 7pF size 0603 Capacitor
+
+----------------------
+
+You should consider ordering more of the following components (remaining amount):
+
+-1x MCP73831T-2ACI in SMD-SOT-23 package
+5x NRF24L01+ in SMD-VQFN package
+
+----------------------
+
+The following components aren't in the collection and need to be ordered:
+
+4x LED of size CHIPLED_0603
+6x 100KOHM-1/10W-1%(0603) of size 0603-RES
+2x MOSFET-NCH-BSS138 of size SOT23-3@1
+6x MOSFET-NCHANNEL2N7002PW of size SOT323
+2x 742792641 of size RESC1608X100N
+2x W-32.768KHZ-K-2-T of size ABS05
+2x ATSAMD21G of size QFN-48_NO_EXPOSED_PAD
+2x CMT-1603-SMT-TR of size CMT1603SMTTR
+4x LED of size CHIPLED_0603
+2x CORTEX_JTAG_DEBUG_ of size 2X5--1.27MM
+2x SPX3819M5-L-5-0_TR of size SOT95P280X145-5N
+4x FERRITE of size L0603
+4x 132134RP of size unknown
+2x 282834-2 of size 282834-2_1
+2x 8.2pf size 0603 Capacitor
+2x ABS10-32.768KHZ-9-T of size ABS-10
+2x FA-238_16.0000MB-K3 of size EPSON-FA-238
+2x JS202011JCQN of size unknown
+8x MBR120VLSFT1G of size SODFL3616X98N
+2x MK20DX256VLH7 of size LQFP64-05
+2x MKL02Z32VFG4 of size QFN50P300X300X65-17N
+6x PTS810SJG250SMTRLFS of size unknown
+4x QBLP679E-RGB of size QBLP679ERGB
+4x LED of size CHIP-LED0805
+2x RFM95W-868S2 of size XCVR_RFM95W-868S2
+2x SS5P6-M3/86A of size TO-277A(SMPC)
+2x TPS7A4533KTTR of size KTT0005B
+2x USB4110-GF-A of size GCT_USB4110-GF-A
+2x XB3-24AUM of size XB324AUM
+
+
+----------------------
+
+
+In-Collection Component Report
+
+Assigned (P = previously had, N = need, H = have after building):
+
+P50x	N8x	H42x 10kΩ size 0603 Resistor in location B3-S2-3-2
+P50x	N6x	H44x 330Ω size 0603 Resistor in location B3-S1-6-2
+P50x	N4x	H46x 4.7μF size 0603 Capacitor in location B4-S2-6-11
+P50x	N4x	H46x 4pF size 0603 Capacitor in location B4-S1-6-8
+P1x	N2x	H-1x MCP73831T-2ACI in SMD-SOT-23 package in location B7-S2-2-3
+P7x	N2x	H5x NRF24L01+ in SMD-VQFN package in location B7-S2-1-3
+P69x	N24x	H45x 100nF size 0603 Capacitor in location B4-S2-6-5
+P50x	N24x	H26x 100kΩ size 0603 Resistor in location B3-S2-5-2
+P50x	N14x	H36x 10μF size 0603 Capacitor in location B4-S2-6-12
+P50x	N6x	H44x 1kΩ size 0603 Resistor in location B3-S2-1-2
+P50x	N8x	H42x 1μF size 0603 Capacitor in location B4-S2-6-9
+P50x	N6x	H44x 2.2kΩ size 0603 Resistor in location B3-S2-1-10
+P50x	N4x	H46x 2.2μF size 0603 Capacitor in location B4-S2-6-10
+P50x	N4x	H46x 33Ω size 0603 Resistor in location B3-S1-4-2
+P50x	N4x	H46x 470Ω size 0603 Resistor in location B3-S1-6-6
+P50x	N4x	H46x 5.1kΩ size 0603 Resistor in location B3-S2-2-7
+P50x	N4x	H46x 5.6Ω size 0603 Resistor in location B3-S1-2-8
+P50x	N6x	H44x 68Ω size 0603 Resistor in location B3-S1-4-10
+P50x	N4x	H46x 7pF size 0603 Capacitor in location B4-S2-1-5
+
+
+----------------------
+
+Unassigned:
+
+<<< CATEGORY EMPTY >>>

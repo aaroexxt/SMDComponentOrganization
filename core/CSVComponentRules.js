@@ -21,11 +21,11 @@ const nameReplaceRules = [
 	["SMD",""]
 ]
 
-const ignoredComponents = [ //format: component needs to have the data in both [NAME, PACKAGE]
+const ignoredComponents = [ //format: component needs to have the data in both [NAME, PACKAGE, strictCheckName]
 	["PINHD", "X"],
 	["SOLDERJUMPER", "SOLDERJUMPER"],
-	["SJ", "unknown"],
-	["TP", "B"],
+	["SJ", "unknown", true],
+	["TP", "B", true],
 	["HEADER_", "X"],
 	["HEADER-", "1X"]
 ]

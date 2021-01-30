@@ -46,7 +46,7 @@ const assignComponents = require("./core/assignComponents.js");
 
 //Settings
 const strictComponentComparison = false; //enables strict checks like matching voltage range for capacitors in comparison
-const componentSimilarityThreshold = 0.55; //string compare threshold in CSV parsing
+const componentSimilarityThreshold = 0.6; //string compare threshold in CSV parsing
 const minComponentsBeforeWarning = 5; //minimum amount of components in box before warning
 
 var store = {
@@ -578,44 +578,51 @@ const BOMMenu = () => {
 		if (choice == mChoices[0]) {
 			afterMain();
 		} else {
-			dirPicker(bomBaseDir).then(dirs => {
-				getFilesInDir(dirs).then(files => {
-					if (files.length == 0) {
-						console.log("Oop no files found in folder, pick another project");
-						BOMMenu();
-					} else {
-						let csvs = [];
-						for (let i=0; i<files.length; i++) {
-							if (files[i].toLowerCase().indexOf(".csv") > -1) {
-								csvs.push(files[i]);
+			let allComponents = [];
+			let allProjects = [];
+
+			const csvPicker = () => {
+				console.log("Pick a project file:");
+				dirPicker(bomBaseDir).then(dirs => {
+					getFilesInDir(dirs).then(files => {
+						if (files.length == 0) {
+							console.log("Oop no files found in folder, pick another project");
+							csvPicker();
+						} else {
+							let csvs = [];
+							for (let i=0; i<files.length; i++) {
+								if (files[i].toLowerCase().indexOf(".csv") > -1) {
+									csvs.push(files[i]);
+								}
+							}
+
+							switch (csvs.length) {
+								case 0:
+									console.error("Oop no CSV files found, pick another project");
+									csvPicker();
+									break;
+								case 1:
+									csvFound(csvs[0]);
+									break;
+								default:
+									inquirer.prompt({
+										name: "Pick a CSV file",
+										type: "list",
+										choices: csvs
+									}).then(csvchoice => {
+										let keys = Object.keys(csvchoice);
+
+										csvFound(csvchoice[keys[0]]);
+									}).catch(err => {
+										console.error(err);
+									});
+									break;
 							}
 						}
-
-						switch (csvs.length) {
-							case 0:
-								console.error("Oop no CSV files found, pick another project");
-								BOMMenu();
-								break;
-							case 1:
-								csvFound(csvs[0]);
-								break;
-							default:
-								inquirer.prompt({
-									name: "Pick a CSV file",
-									type: "list",
-									choices: csvs
-								}).then(csvchoice => {
-									let keys = Object.keys(csvchoice);
-
-									csvFound(csvchoice[keys[0]]);
-								}).catch(err => {
-									console.error(err);
-								});
-								break;
-						}
-					}
+					})
 				})
-			})
+			}
+			csvPicker(); //immediately call CSVPicker for the first time
 
 			const csvFound = csvPath => {
 				inquirer.prompt({
@@ -625,243 +632,336 @@ const BOMMenu = () => {
 				}).then(amnt => {
 					amnt = amnt[Object.keys(amnt)[0]];
 
-					let cChoices = ["Immediately Remove From Inventory", "Don't Remove From Inventory (dry run)"];
-					inquirer.prompt({
-						name: "irq",
-						message:"What do you want to do with component data from CSV file?",
-						type: "list",
-						choices: cChoices
-					}).then(cChoice => {
-						cChoice = cChoice[Object.keys(cChoice)[0]];
-						let removeFromBOM = cChoice == cChoices[0];
-						console.log(removeFromBOM ? "Will remove parsed components from BOM":"Dry run mode");
+					let projectName = csvPath.substring(csvPath.lastIndexOf("/")+1, csvPath.lastIndexOf("."));
+					allProjects.push([projectName, amnt]);
 
-						CSVToComponentList(csvPath, amnt).then(components => {
-							console.log("Checking parsed components against store...");
+					CSVToComponentList(csvPath, amnt).then(components => {
+						for (let i=0; i<components.length; i++) {
+							allComponents.push(components[i]);
+						}
 
-							let foundComponents = [];
-							let notFoundComponents = [];
+						inquirer.prompt({
+							name: "addAnother",
+							message: "Add another CSV file?",
+							type: "confirm"
+						}).then(addAnother => {
+							addAnother = addAnother[Object.keys(addAnother)[0]];
+
+							if (addAnother) { //go back and add another csv
+								csvPicker(); //go back to picker
+							} else { //continue on to processing
+								let cChoices = ["Immediately Remove From Inventory", "Don't Remove From Inventory (dry run)"];
+								inquirer.prompt({
+									name: "irq",
+									message:"What do you want to do with component data from CSV file(s)?",
+									type: "list",
+									choices: cChoices
+								}).then(cChoice => {
+									cChoice = cChoice[Object.keys(cChoice)[0]];
+									let removeFromBOM = cChoice == cChoices[0];
+									console.log(removeFromBOM ? "Will remove parsed components from BOM":"Dry run mode");
+
+									processParsedComponents(allComponents, removeFromBOM);
+
+								})
+							}
+						})
+
+					})
+
+					
+					
+					
+				})
+
+				const processParsedComponents = (components, removeFromBOM) => {
+					console.log("Checking parsed components against store...");
+
+					let foundComponents = [];
+					let notFoundComponents = [];
 
 
-							/*
-							STEP 1: iterate through component store and see if there are any matches
-							*/
+					/*
+					STEP 1: iterate through component store and see if there are any matches
+					*/
 
-							for (let i=0; i<components.length; i++) {
-								let component = components[i];
+					for (let i=0; i<components.length; i++) {
+						let component = components[i];
 
-								switch (component.type) {
-									case cDefs.types.RESISTOR: //For these two, the normalizedValue stuff should be ready to use
-									case cDefs.types.CAPACITOR:
-										let found = false;
-										for (let j=0; j<store.components.length; j++) {
-											let storeComponent = store.components[j];
-											if (approxComponentCompare(component, storeComponent)) {
-												foundComponents.push([j, component.quantity]);
-												// console.log("HIT STORE for "+component.value+", "+component.size);
+						switch (component.type) {
+							case cDefs.types.RESISTOR: //For these two, the normalizedValue stuff should be ready to use
+							case cDefs.types.CAPACITOR:
+								let found = false;
+								for (let j=0; j<store.components.length; j++) {
+									let storeComponent = store.components[j];
+									if (approxComponentCompare(component, storeComponent)) {
+										foundComponents.push([j, component.quantity]);
+										// console.log("HIT STORE for "+component.value+", "+component.size);
+										found = true;
+										break;
+									}
+								}
+								// if (!found) console.log("NOHIT store for "+component.value+", "+component.size);
+								if (!found) notFoundComponents.push([component, component.quantity]);
+								break;
+							//case cDefs.types.LED:
+							default:
+								let maxSimilar = similarIdx = -1;
+								for (let j=0; j<store.components.length; j++) {
+									let storeComponent = store.components[j];
+									let compareTo;
+									switch (storeComponent.type) {
+										case cDefs.types.IC:
+										case cDefs.types.OTHER:
+											compareTo = storeComponent.additional.identifier;
+											break;
+										case cDefs.types.CRYSTAL:
+											compareTo = storeComponent.additional.frequency+storeComponent.additional.frequencyUnit;
+											break;
+										case cDefs.types.LED:
+											compareTo = storeComponent.additional.color;
+											break;
+										default:
+											continue; //skip loop if it didn't find it
+											break;
+									}
+									let similarity = ratcliffObershelp(component.value, compareTo);
+
+									if (similarity > maxSimilar) {
+										maxSimilar = similarity;
+										similarIdx = j;
+									}
+								}
+
+								if (maxSimilar > componentSimilarityThreshold) { //make sure it matches enough
+									// console.log("CHIT STORE for "+component.value+", "+component.size);
+									foundComponents.push([similarIdx, component.quantity]);
+								} else {
+									notFoundComponents.push([component, component.quantity]);
+									// console.log("CNOHIT store for "+component.value+", "+component.size);
+								}
+
+								break;
+						}
+					}
+
+					/*
+					STEP 2: uniqueify lists to combine any labels that refer to the same component (B120-13-F from zenith I'm looking at u)
+					*/
+					for (let i=foundComponents.length - 1; i>=0; i--) { //Iterate in reverse to avoid breaking loop when we remove elements
+						for (let j=0; j<foundComponents.length; j++) {
+							if (i == j) continue; //don't check elements against themselves
+							if (foundComponents[i][0] == foundComponents[j][0]) { //indexes match, combine
+								foundComponents[i][1] += foundComponents[j][1];
+								foundComponents.splice(j, 1);
+								break;
+							}
+						}
+					}
+
+					for (let i=notFoundComponents.length - 1; i>=0; i--) { //Iterate in reverse to avoid breaking loop when we remove elements
+						for (let j=0; j<notFoundComponents.length; j++) {
+							if (i == j) continue; //don't check elements against themselves
+							let c1 = notFoundComponents[i][0];
+							let c2 = notFoundComponents[j][0]
+							if (c1.value == c2.value && c1.type == c2.type && c1.size == c2.size) { //data matches, combine
+								notFoundComponents[i][1] += notFoundComponents[j][1];
+								notFoundComponents[i][0].quantity += notFoundComponents[j][0].quantity;
+								notFoundComponents.splice(j, 1);
+								break;
+							}
+						}
+					}
+
+					/*
+					STEP 3: take components found in store, subtract quantities and find out if store has enough
+					*/
+					//Separation 1: whether inventory is good
+					let enoughComponents = [];
+					let notEnoughComponents = [];
+
+					//Separation 2: whether they're assigned
+					let assignedComponents = [];
+					let unassignedComponents = [];
+
+					for (let i=0; i<foundComponents.length; i++) {
+						let matchIdx = foundComponents[i][0];
+						let quantity = foundComponents[i][1];
+						let prevQuantity = JSON.parse(JSON.stringify(store.components[matchIdx].quantity));
+						let newQuantity = store.components[matchIdx].quantity - quantity; //subtract quantity since we're using them
+
+						if (removeFromBOM) store.components[matchIdx].quantity = newQuantity; //only remove from BOM if option specified
+						if (store.components[matchIdx].assigned) {
+							let uuid = store.components[matchIdx].uuid;
+
+							let found = false;
+							for (let z=0; z<store.boxes.length; z++) {
+								let box = store.boxes[z];
+								for (let i=0; i<box.sections.length; i++) {
+									for (let j=0; j<box.sections[i].assignments.length; j++) {
+										for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+											if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
+
+												let loc = "B"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1);
+												assignedComponents.push([store.components[matchIdx], quantity, prevQuantity, newQuantity, loc]);
+												if (newQuantity > minComponentsBeforeWarning) {
+													enoughComponents.push([store.components[matchIdx], newQuantity]);
+												} else {
+													notEnoughComponents.push([store.components[matchIdx], newQuantity]);
+												}
+
 												found = true;
 												break;
 											}
 										}
-										// if (!found) console.log("NOHIT store for "+component.value+", "+component.size);
-										if (!found) notFoundComponents.push([component, component.quantity]);
-										break;
-									//case cDefs.types.LED:
-									default:
-										let maxSimilar = similarIdx = -1;
-										for (let j=0; j<store.components.length; j++) {
-											let storeComponent = store.components[j];
-											let compareTo;
-											switch (storeComponent.type) {
-												case cDefs.types.IC:
-												case cDefs.types.OTHER:
-													compareTo = storeComponent.additional.identifier;
-													break;
-												case cDefs.types.CRYSTAL:
-													compareTo = storeComponent.additional.frequency+storeComponent.additional.frequencyUnit;
-													break;
-												case cDefs.types.LED:
-													compareTo = storeComponent.additional.color;
-													break;
-												default:
-													continue; //skip loop if it didn't find it
-													break;
-											}
-											let similarity = ratcliffObershelp(component.value, compareTo);
-
-											if (similarity > maxSimilar) {
-												maxSimilar = similarity;
-												similarIdx = j;
-											}
-										}
-
-										if (maxSimilar > componentSimilarityThreshold) { //make sure it matches enough
-											// console.log("CHIT STORE for "+component.value+", "+component.size);
-											foundComponents.push([similarIdx, component.quantity]);
-										} else {
-											notFoundComponents.push([component, component.quantity]);
-											// console.log("CNOHIT store for "+component.value+", "+component.size);
-										}
-
-										break;
+										if (found) break;
+									}
+									if (found) break;
 								}
 							}
-
-							/*
-							STEP 2: take components found in store, subtract quantities and find out if store has enough
-							*/
-							//Separation 1: whether inventory is good
-							let enoughComponents = [];
-							let notEnoughComponents = [];
-
-							//Separation 2: whether they're assigned
-							let assignedComponents = [];
-							let unassignedComponents = [];
-
-							for (let i=0; i<foundComponents.length; i++) {
-								let matchIdx = foundComponents[i][0];
-								let quantity = foundComponents[i][1];
-								let newQuantity = store.components[matchIdx].quantity - quantity; //subtract quantity since we're using them
-
-								if (removeFromBOM) store.components[matchIdx].quantity = newQuantity; //only remove from BOM if option specified
-								if (store.components[matchIdx].assigned) {
-									let uuid = store.components[matchIdx].uuid;
-
-									let found = false;
-									for (let z=0; z<store.boxes.length; z++) {
-										let box = store.boxes[z];
-										for (let i=0; i<box.sections.length; i++) {
-											for (let j=0; j<box.sections[i].assignments.length; j++) {
-												for (let b=0; b<box.sections[i].assignments[j].length; b++) {
-													if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
-
-														let loc = "B"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1);
-														assignedComponents.push([store.components[matchIdx], newQuantity, loc]);
-														if (newQuantity > minComponentsBeforeWarning) {
-															enoughComponents.push([store.components[matchIdx], newQuantity]);
-														} else {
-															notEnoughComponents.push([store.components[matchIdx], newQuantity]);
-														}
-
-														found = true;
-														break;
-													}
-												}
-												if (found) break;
-											}
-											if (found) break;
-										}
-									}
-								} else { //Component is unassigned
-									unassignedComponents.push([store.components[matchIdx], newQuantity])
-									if (newQuantity > minComponentsBeforeWarning) {
-										enoughComponents.push([store.components[matchIdx], newQuantity]);
-									} else {
-										notEnoughComponents.push([store.components[matchIdx], newQuantity]);
-									}
-								}
+						} else { //Component is unassigned
+							unassignedComponents.push([store.components[matchIdx], quantity, prevQuantity, newQuantity])
+							if (newQuantity > minComponentsBeforeWarning) {
+								enoughComponents.push([store.components[matchIdx], newQuantity]);
+							} else {
+								notEnoughComponents.push([store.components[matchIdx], newQuantity]);
 							}
+						}
+					}
 
-							let printable = "";
-							let projectName = csvPath.substring(csvPath.lastIndexOf("/")+1, csvPath.lastIndexOf("."));
-							printable += "SMDComponentOrganization V2\nBy Aaron Becker\n\n";
-							printable += "Report Generated At "+new Date().toLocaleString()+"\n";
-							printable += "Project: "+amnt+"x "+projectName+"\n";
-							printable += "\n----------------------\n\n";
+					let printable = "";
 
-							printable += ("You have enough of the following components in boxes (remaining amount):\n\n");
-							for (let i=0; i<enoughComponents.length; i++) {
-								printable += returnComponentWithQuantity(enoughComponents[i][0], enoughComponents[i][1])+"\n";
+					//Uniquify allProjects
+					for (let i=allProjects.length - 1; i>=0; i--) { //Iterate in reverse to avoid breaking loop when we remove elements
+						for (let j=0; j<allProjects.length; j++) {
+							if (i == j) continue; //don't check elements against themselves
+							if (allProjects[i][0] == allProjects[j][0]) { //indexes match, combine
+								allProjects[i][1] += allProjects[j][1];
+								allProjects.splice(j, 1);
+								break;
 							}
-							if (enoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
-							printable += "\n----------------------\n\n";
+						}
+					}
 
-							printable += ("You should consider ordering more of the following components (remaining amount):\n\n");
-							for (let i=0; i<notEnoughComponents.length; i++) {
-								printable += returnComponentWithQuantity(notEnoughComponents[i][0], notEnoughComponents[i][1])+"\n";
-							}
-							if (notEnoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+					let projectName = allProjects[0][0];
+					for (let i=1; i<allProjects.length; i++) {
+						projectName+="_"+allProjects[i][0];
+					}
 
-							printable += "\n----------------------\n\n";
-							printable += ("The following components aren't in the collection and need to be ordered:\n\n");
-							for (let i=0; i<notFoundComponents.length; i++) {
-								printable += returnComponentWithQuantity(notFoundComponents[i][0])+"\n";
-							}
-							if (notFoundComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
 
-							printable += "\n\n----------------------\n\n\n";
-							printable += "In-Collection Component Report\n\n";
+					printable += "SMDComponentOrganization V2\nBy Aaron Becker\n\n";
+					printable += "Report Generated On "+new Date().toLocaleString()+"\n";
+					printable += "Project(s) included in report:\n";
+					for (let i=0; i<allProjects.length; i++) {
+						printable+= "\t"+allProjects[i][1]+"x "+allProjects[i][0]+"\n";
+					}
+					printable += "\n----------------------\n\n";
 
-							printable+= "Assigned:\n\n";
-							for (let i=0; i<assignedComponents.length; i++) {
-								printable += returnComponentWithQuantity(assignedComponents[i][0], assignedComponents[i][1])+" in location "+assignedComponents[i][2]+"\n";
-							}
-							if (assignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
-							printable += "\n\n----------------------\n\n";
+					printable += ("You have enough of the following components in boxes (remaining amount):\n\n");
+					for (let i=0; i<enoughComponents.length; i++) {
+						printable += returnComponentWithQuantity(enoughComponents[i][0], enoughComponents[i][1])+"\n";
+					}
+					if (enoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+					printable += "\n----------------------\n\n";
 
-							printable+= "Unassigned:\n\n";
-							for (let i=0; i<unassignedComponents.length; i++) {
-								printable += returnComponentWithQuantity(unassignedComponents[i][0], unassignedComponents[i][1])+" in location "+unassignedComponents[i][2]+"\n";
-							}
-							if (unassignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+					printable += ("You should consider ordering more of the following components (remaining amount):\n\n");
+					for (let i=0; i<notEnoughComponents.length; i++) {
+						printable += returnComponentWithQuantity(notEnoughComponents[i][0], notEnoughComponents[i][1])+"\n";
+					}
+					if (notEnoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
 
-							let rChoices = ["Print report to console", "Save report to file (as "+projectName+".txt)", "Save report to file (custom name)", "Back to Main Menu"]
-							
-							const afterReport = () => {
-								inquirer.prompt({
-									name: "tD",
-									message:"A report has been generated successfully. What would you like to do?",
-									choices: rChoices,
-									type: "list"
-								}).then(repChoice => {
-									repChoice = repChoice[Object.keys(repChoice)[0]];
+					printable += "\n----------------------\n\n";
+					printable += ("The following components aren't in the collection and need to be ordered:\n\n");
+					for (let i=0; i<notFoundComponents.length; i++) {
+						printable += returnComponentWithQuantity(notFoundComponents[i][0])+"\n";
+					}
+					if (notFoundComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
 
-									if (repChoice == rChoices[0]) {
-										console.log(printable);
+					printable += "\n\n----------------------\n\n\n";
+					printable += "In-Collection Component Report\n\n";
+
+					printable+= "Assigned (P = previously had, N = need, H = have after building):\n\n";
+					for (let i=0; i<assignedComponents.length; i++) {
+						printable += "P"+assignedComponents[i][2]+"x\tN"+assignedComponents[i][1]+"x\tH"+returnComponentWithQuantity(assignedComponents[i][0], assignedComponents[i][3])+" in location "+assignedComponents[i][4]+"\n";
+					}
+					if (assignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+					printable += "\n\n----------------------\n\n";
+
+					printable+= "Unassigned:\n\n";
+					for (let i=0; i<unassignedComponents.length; i++) {
+						// printable += "Had "+assignedComponents[i][2]+"x, used "+assignedComponents[i][1]+"x, now have "+returnComponentWithQuantity(assignedComponents[i][0], assignedComponents[i][3])+" in location "+assignedComponents[i][3]+"\n";
+					}
+					if (unassignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+
+					let rChoices = ["Print report to console", "Save report to file (as "+projectName+".txt)", "Save report to file (custom name)", "Back to Main Menu"]
+					
+					const afterReport = () => {
+						
+						const writeReport = (path, data) => {
+							const doWrite = () => { //the lengths I go to to save duplicating code...
+								fs.writeFile(path, data, function(err) {
+									if (err) {
+										console.error("Error writing file: "+err);
 										afterReport();
-									} else if (repChoice == rChoices[1]) {
-										let fPath = path.join(__dirname,projectName+".txt");
-										fs.writeFile(fPath, printable, function(err) {
-											if (err) {
-												console.error("Error writing file: "+err);
-												afterReport();
-											} else {
-												console.log("Written file successfully to "+fPath);
-												afterReport();
-											}
-										});
-									} else if (repChoice == rChoices[2]) {
-										inquirer.prompt({
-											name: "cName",
-											message: "Enter a filename (no extension please):",
-											type: "input"
-										}).then(fName => {
-											fName = fName[Object.keys(fName)[0]];
-											let fPath = path.join(__dirname,fName+".txt");
-											fs.writeFile(fPath, printable, function(err) {
-												if (err) {
-													console.error("Error writing file: "+err);
-													afterReport();
-												} else {
-													console.log("Written file successfully to "+fPath);
-													afterReport();
-												}
-											});
-										})
 									} else {
-										afterMain();
+										console.log("Written file successfully to "+path);
+										afterReport();
+									}
+								});
+							}
+
+							if (fs.existsSync(path)) {
+								inquirer.prompt({
+									type: "confirm",
+									name: "overw",
+									message: "Report file already exists, overwrite?"
+								}).then(ovw => {
+									ovw = ovw[Object.keys(ovw)[0]];
+
+									if (ovw) {
+										doWrite();
+									} else { //j return to menu if no overwrite
+										afterReport();
 									}
 								})
+							} else {
+								doWrite();
 							}
-							afterReport(); //trigger after report
+							
+						}
 
+						inquirer.prompt({
+							name: "tD",
+							message:"A report has been generated successfully. What would you like to do?",
+							choices: rChoices,
+							type: "list"
+						}).then(repChoice => {
+							repChoice = repChoice[Object.keys(repChoice)[0]];
 
+							if (repChoice == rChoices[0]) {
+								console.log(printable);
+								afterReport();
+							} else if (repChoice == rChoices[1]) {
+								let fPath = path.join(__dirname,projectName+".txt");
+								writeReport(fPath, printable);
+							} else if (repChoice == rChoices[2]) {
+								inquirer.prompt({
+									name: "cName",
+									message: "Enter a filename (no extension please):",
+									type: "input"
+								}).then(fName => {
+									fName = fName[Object.keys(fName)[0]];
+									let fPath = path.join(__dirname,fName+".txt");
+									writeReport(fPath, printable);
+								})
+							} else {
+								afterMain();
+							}
 						})
+					}
+					afterReport(); //trigger after report
 
-					})
-					
-					
-				})
+				}
 			}
 		}
 	})

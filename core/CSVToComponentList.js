@@ -15,6 +15,7 @@ const skipFirstLine = true; //skip first line in CSV (it only has a header)
 
 function jankParse(data, opts, callback) { //lmao did I rly just write a CSV parser in about 7 minutes that only processes the first 4 elements? wow what a jank hack. bet it has a lot of bugs lol lets speedrun this boi
 	let split = data.split("\r\n");
+	if (split.length == 1) split = data.split("\n"); //JANK hack for macos generated linefeeds, it won't split properly if it's using only \n instead of \n\r
 	
 	let procRet = [];
 	for (let b=0; b<split.length; b++) {
@@ -38,12 +39,15 @@ function jankParse(data, opts, callback) { //lmao did I rly just write a CSV par
 	}
 
 	procRet.splice(-1,1); //remove last element dont ask why
+
 	return callback(false,procRet);
 }
 
 
 const CSVToComponentList = function(csvPath, boardCount) {
 	return new Promise((resolve, reject) => {
+		if (boardCount == 0) return resolve([]); //just in case something dumb happens
+
 		let csvData = fs.readFileSync(csvPath, {encoding:'utf8', flag:'r'});
 		let components = []; //component list
 
@@ -76,9 +80,16 @@ const CSVToComponentList = function(csvPath, boardCount) {
 
 					let ignore = false;
 					for (let j=0; j<ignoredComponents.length; j++) {
-						if (name.indexOf(ignoredComponents[j][0]) > -1 && package.indexOf(ignoredComponents[j][1]) > -1) {
-							if (debugMode) console.log("Ignored component "+name);
-							ignore = true; //ignore component since it's not a real one, like a solder jumper
+						if (ignoredComponents[j][2]) { //strict
+							if (name == ignoredComponents[j][0] && package.indexOf(ignoredComponents[j][1]) > -1) {
+								if (debugMode || true) console.log("Strict - Ignored component "+name+", "+package);
+								ignore = true; //ignore component since it's not a real one, like a solder jumper
+							}
+						} else {
+							if (name.indexOf(ignoredComponents[j][0]) > -1 && package.indexOf(ignoredComponents[j][1]) > -1) {
+								if (debugMode || true) console.log("Ignored component "+name+", "+package);
+								ignore = true; //ignore component since it's not a real one, like a solder jumper
+							}
 						}
 					}
 					if (ignore) continue;
@@ -218,7 +229,9 @@ const CSVToComponentList = function(csvPath, boardCount) {
 					}
 				}
 
-				console.log("Processing CSV ok");
+				console.log("CSV processed successfully; parsed "+components.length+" components");
+				for (let i=0; i<components.length; i++) {
+				}
 				return resolve(components);
 			}
 		})
