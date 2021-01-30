@@ -34,7 +34,7 @@ const cDefs = require("./core/componentDefinitions.js");
 const bDefs = require("./core/boxDefinitions.js");
 
 //Printing stuff
-const {printComponent, printComponentWithQuantity, printBox} = require("./core/printComponentBox.js");
+const {printComponent, returnComponentWithQuantity, printBox} = require("./core/printComponentBox.js");
 
 const componentLookup = require("./core/lookup.js");
 const {levenshtein, ratcliffObershelp} = require("./core/stringCompare.js");
@@ -617,148 +617,250 @@ const BOMMenu = () => {
 				})
 			})
 
-			const csvFound = path => {
+			const csvFound = csvPath => {
 				inquirer.prompt({
 					name: "amt",
 					message: "Amount of this project that are being made?",
 					type: "number"
 				}).then(amnt => {
 					amnt = amnt[Object.keys(amnt)[0]];
-					
-					CSVToComponentList(path, amnt).then(components => {
-						console.log("Checking parsed components against store...");
 
-						let foundComponents = [];
-						let notFoundComponents = [];
+					let cChoices = ["Immediately Remove From Inventory", "Don't Remove From Inventory (dry run)"];
+					inquirer.prompt({
+						name: "irq",
+						message:"What do you want to do with component data from CSV file?",
+						type: "list",
+						choices: cChoices
+					}).then(cChoice => {
+						cChoice = cChoice[Object.keys(cChoice)[0]];
+						let removeFromBOM = cChoice == cChoices[0];
+						console.log(removeFromBOM ? "Will remove parsed components from BOM":"Dry run mode");
+
+						CSVToComponentList(csvPath, amnt).then(components => {
+							console.log("Checking parsed components against store...");
+
+							let foundComponents = [];
+							let notFoundComponents = [];
 
 
-						/*
-						STEP 1: iterate through component store and see if there are any matches
-						*/
+							/*
+							STEP 1: iterate through component store and see if there are any matches
+							*/
 
-						for (let i=0; i<components.length; i++) {
-							let component = components[i];
+							for (let i=0; i<components.length; i++) {
+								let component = components[i];
 
-							switch (component.type) {
-								case cDefs.types.RESISTOR: //For these two, the normalizedValue stuff should be ready to use
-								case cDefs.types.CAPACITOR:
-									let found = false;
-									for (let j=0; j<store.components.length; j++) {
-										let storeComponent = store.components[j];
-										if (approxComponentCompare(component, storeComponent)) {
-											foundComponents.push([j, component.quantity]);
-											// console.log("HIT STORE for "+component.value+", "+component.size);
-											found = true;
-											break;
+								switch (component.type) {
+									case cDefs.types.RESISTOR: //For these two, the normalizedValue stuff should be ready to use
+									case cDefs.types.CAPACITOR:
+										let found = false;
+										for (let j=0; j<store.components.length; j++) {
+											let storeComponent = store.components[j];
+											if (approxComponentCompare(component, storeComponent)) {
+												foundComponents.push([j, component.quantity]);
+												// console.log("HIT STORE for "+component.value+", "+component.size);
+												found = true;
+												break;
+											}
 										}
-									}
-									// if (!found) console.log("NOHIT store for "+component.value+", "+component.size);
-									if (!found) notFoundComponents.push([component, component.quantity]);
-									break;
-								//case cDefs.types.LED:
-								default:
-									let maxSimilar = similarIdx = -1;
-									for (let j=0; j<store.components.length; j++) {
-										let storeComponent = store.components[j];
-										let compareTo;
-										switch (storeComponent.type) {
-											case cDefs.types.IC:
-											case cDefs.types.OTHER:
-												compareTo = storeComponent.additional.identifier;
-												break;
-											case cDefs.types.CRYSTAL:
-												compareTo = storeComponent.additional.frequency+storeComponent.additional.frequencyUnit;
-												break;
-											case cDefs.types.LED:
-												compareTo = storeComponent.additional.color;
-												break;
-											default:
-												continue; //skip loop if it didn't find it
-												break;
-										}
-										let similarity = ratcliffObershelp(component.value, compareTo);
-
-										if (similarity > maxSimilar) {
-											maxSimilar = similarity;
-											similarIdx = j;
-										}
-									}
-
-									if (maxSimilar > componentSimilarityThreshold) { //make sure it matches enough
-										// console.log("CHIT STORE for "+component.value+", "+component.size);
-										foundComponents.push([similarIdx, component.quantity]);
-									} else {
-										notFoundComponents.push([component, component.quantity]);
-										// console.log("CNOHIT store for "+component.value+", "+component.size);
-									}
-
-									break;
-							}
-						}
-
-						/*
-						STEP 2: take components found in store, subtract quantities and find out if store has enough
-						*/
-						let enoughComponents = [];
-						let notEnoughComponents = [];
-
-						for (let i=0; i<foundComponents.length; i++) {
-							let matchIdx = foundComponents[i][0];
-							let quantity = foundComponents[i][1];
-
-							store.components[matchIdx].quantity -= quantity; //subtract quantity since we're using them
-
-							if (store.components[matchIdx].assigned) {
-								let uuid = store.components[matchIdx].uuid;
-
-								let found = false;
-								for (let z=0; z<store.boxes.length; z++) {
-									let box = store.boxes[z];
-									for (let i=0; i<box.sections.length; i++) {
-										for (let j=0; j<box.sections[i].assignments.length; j++) {
-											for (let b=0; b<box.sections[i].assignments[j].length; b++) {
-												if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
-
-													let loc = "B"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1);
-													if (store.components[matchIdx].quantity > minComponentsBeforeWarning) {
-														enoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, true, loc]);
-													} else {
-														notEnoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, true, loc]);
-													}
-
-													found = true;
+										// if (!found) console.log("NOHIT store for "+component.value+", "+component.size);
+										if (!found) notFoundComponents.push([component, component.quantity]);
+										break;
+									//case cDefs.types.LED:
+									default:
+										let maxSimilar = similarIdx = -1;
+										for (let j=0; j<store.components.length; j++) {
+											let storeComponent = store.components[j];
+											let compareTo;
+											switch (storeComponent.type) {
+												case cDefs.types.IC:
+												case cDefs.types.OTHER:
+													compareTo = storeComponent.additional.identifier;
 													break;
+												case cDefs.types.CRYSTAL:
+													compareTo = storeComponent.additional.frequency+storeComponent.additional.frequencyUnit;
+													break;
+												case cDefs.types.LED:
+													compareTo = storeComponent.additional.color;
+													break;
+												default:
+													continue; //skip loop if it didn't find it
+													break;
+											}
+											let similarity = ratcliffObershelp(component.value, compareTo);
+
+											if (similarity > maxSimilar) {
+												maxSimilar = similarity;
+												similarIdx = j;
+											}
+										}
+
+										if (maxSimilar > componentSimilarityThreshold) { //make sure it matches enough
+											// console.log("CHIT STORE for "+component.value+", "+component.size);
+											foundComponents.push([similarIdx, component.quantity]);
+										} else {
+											notFoundComponents.push([component, component.quantity]);
+											// console.log("CNOHIT store for "+component.value+", "+component.size);
+										}
+
+										break;
+								}
+							}
+
+							/*
+							STEP 2: take components found in store, subtract quantities and find out if store has enough
+							*/
+							//Separation 1: whether inventory is good
+							let enoughComponents = [];
+							let notEnoughComponents = [];
+
+							//Separation 2: whether they're assigned
+							let assignedComponents = [];
+							let unassignedComponents = [];
+
+							for (let i=0; i<foundComponents.length; i++) {
+								let matchIdx = foundComponents[i][0];
+								let quantity = foundComponents[i][1];
+								let newQuantity = store.components[matchIdx].quantity - quantity; //subtract quantity since we're using them
+
+								if (removeFromBOM) store.components[matchIdx].quantity = newQuantity; //only remove from BOM if option specified
+								if (store.components[matchIdx].assigned) {
+									let uuid = store.components[matchIdx].uuid;
+
+									let found = false;
+									for (let z=0; z<store.boxes.length; z++) {
+										let box = store.boxes[z];
+										for (let i=0; i<box.sections.length; i++) {
+											for (let j=0; j<box.sections[i].assignments.length; j++) {
+												for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+													if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
+
+														let loc = "B"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1);
+														assignedComponents.push([store.components[matchIdx], newQuantity, loc]);
+														if (newQuantity > minComponentsBeforeWarning) {
+															enoughComponents.push([store.components[matchIdx], newQuantity]);
+														} else {
+															notEnoughComponents.push([store.components[matchIdx], newQuantity]);
+														}
+
+														found = true;
+														break;
+													}
 												}
+												if (found) break;
 											}
 											if (found) break;
 										}
-										if (found) break;
+									}
+								} else { //Component is unassigned
+									unassignedComponents.push([store.components[matchIdx], newQuantity])
+									if (newQuantity > minComponentsBeforeWarning) {
+										enoughComponents.push([store.components[matchIdx], newQuantity]);
+									} else {
+										notEnoughComponents.push([store.components[matchIdx], newQuantity]);
 									}
 								}
-							} else {
-								if (store.components[matchIdx].quantity > minComponentsBeforeWarning) {
-									enoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, false]);
-								} else {
-									notEnoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, false]);
-								}
 							}
-						}
 
-						console.log("You have enough of the following components:");
-						for (let i=0; i<enoughComponents.length; i++) {
-							printComponentWithQuantity(enoughComponents[i][0]);
-						}
+							let printable = "";
+							let projectName = csvPath.substring(csvPath.lastIndexOf("/")+1, csvPath.lastIndexOf("."));
+							printable += "SMDComponentOrganization V2\nBy Aaron Becker\n\n";
+							printable += "Report Generated At "+new Date().toLocaleString()+"\n";
+							printable += "Project: "+amnt+"x "+projectName+"\n";
+							printable += "\n----------------------\n\n";
 
-						console.log("\n\nYou should consider ordering more of the following components:");
-						for (let i=0; i<notEnoughComponents.length; i++) {
-							printComponentWithQuantity(notEnoughComponents[i][0]);
-						}
+							printable += ("You have enough of the following components in boxes (remaining amount):\n\n");
+							for (let i=0; i<enoughComponents.length; i++) {
+								printable += returnComponentWithQuantity(enoughComponents[i][0], enoughComponents[i][1])+"\n";
+							}
+							if (enoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+							printable += "\n----------------------\n\n";
 
-						console.log("\n\nThe following components aren't stocked and need to be ordered:");
-						for (let i=0; i<notFoundComponents.length; i++) {
-							printComponentWithQuantity(notFoundComponents[i][0]);
-						}
+							printable += ("You should consider ordering more of the following components (remaining amount):\n\n");
+							for (let i=0; i<notEnoughComponents.length; i++) {
+								printable += returnComponentWithQuantity(notEnoughComponents[i][0], notEnoughComponents[i][1])+"\n";
+							}
+							if (notEnoughComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+
+							printable += "\n----------------------\n\n";
+							printable += ("The following components aren't in the collection and need to be ordered:\n\n");
+							for (let i=0; i<notFoundComponents.length; i++) {
+								printable += returnComponentWithQuantity(notFoundComponents[i][0])+"\n";
+							}
+							if (notFoundComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+
+							printable += "\n\n----------------------\n\n\n";
+							printable += "In-Collection Component Report\n\n";
+
+							printable+= "Assigned:\n\n";
+							for (let i=0; i<assignedComponents.length; i++) {
+								printable += returnComponentWithQuantity(assignedComponents[i][0], assignedComponents[i][1])+" in location "+assignedComponents[i][2]+"\n";
+							}
+							if (assignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+							printable += "\n\n----------------------\n\n";
+
+							printable+= "Unassigned:\n\n";
+							for (let i=0; i<unassignedComponents.length; i++) {
+								printable += returnComponentWithQuantity(unassignedComponents[i][0], unassignedComponents[i][1])+" in location "+unassignedComponents[i][2]+"\n";
+							}
+							if (unassignedComponents.length == 0) printable += ("<<< CATEGORY EMPTY >>>");
+
+							let rChoices = ["Print report to console", "Save report to file (as "+projectName+".txt)", "Save report to file (custom name)", "Back to Main Menu"]
+							
+							const afterReport = () => {
+								inquirer.prompt({
+									name: "tD",
+									message:"A report has been generated successfully. What would you like to do?",
+									choices: rChoices,
+									type: "list"
+								}).then(repChoice => {
+									repChoice = repChoice[Object.keys(repChoice)[0]];
+
+									if (repChoice == rChoices[0]) {
+										console.log(printable);
+										afterReport();
+									} else if (repChoice == rChoices[1]) {
+										let fPath = path.join(__dirname,projectName+".txt");
+										fs.writeFile(fPath, printable, function(err) {
+											if (err) {
+												console.error("Error writing file: "+err);
+												afterReport();
+											} else {
+												console.log("Written file successfully to "+fPath);
+												afterReport();
+											}
+										});
+									} else if (repChoice == rChoices[2]) {
+										inquirer.prompt({
+											name: "cName",
+											message: "Enter a filename (no extension please):",
+											type: "input"
+										}).then(fName => {
+											fName = fName[Object.keys(fName)[0]];
+											let fPath = path.join(__dirname,fName+".txt");
+											fs.writeFile(fPath, printable, function(err) {
+												if (err) {
+													console.error("Error writing file: "+err);
+													afterReport();
+												} else {
+													console.log("Written file successfully to "+fPath);
+													afterReport();
+												}
+											});
+										})
+									} else {
+										afterMain();
+									}
+								})
+							}
+							afterReport(); //trigger after report
+
+
+						})
+
 					})
+					
+					
 				})
 			}
 		}

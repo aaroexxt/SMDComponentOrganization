@@ -27,23 +27,25 @@ const printComponent = component => {
 	return;
 }
 
-const printComponentWithQuantity = component => {
+const returnComponentWithQuantity = (component, quantity) => {
+	if (typeof quantity == "undefined") quantity = component.quantity; //allow overrides
+
 	let info = "";
 	try {
 		switch(component.type) {
 			case cDefs.types.RESISTOR:
 			case cDefs.types.CAPACITOR:
-				info = component.additional.value+component.additional.valueUnit;
+				info = component.additional.value+component.additional.valueUnit+" size "+component.size;
 				break;
 			case cDefs.types.IC:
 			case cDefs.types.OTHER:
-				info = "identifier "+component.additional.identifier;
+				info = component.additional.identifier+" in "+component.size+" package";
 				break;
 			case cDefs.types.CRYSTAL:
-				info = "frequency "+component.additional.frequency+component.additional.frequencyUnit;
+				info = component.additional.frequency+component.additional.frequencyUnit+" in "+component.size+" package";
 				break;
 			case cDefs.types.LED:
-				info = "color "+component.additional.color;
+				info = "color "+component.additional.color+" in "+component.size+" package";;
 				break;
 			default:
 				bonk; //go to catch block (yes this is a meme)
@@ -51,12 +53,13 @@ const printComponentWithQuantity = component => {
 		}
 	} catch(e) {
 		info = component.type;
-		console.log(component.quantity+"x "+info);
-		return;
+		return (quantity+"x "+info+" of size " + component.size);
 	}
-	info+= " size '"+component.size+"'";
-	console.log(component.quantity+"x "+info+" "+component.type);
-	return;
+	if (component.type != cDefs.types.IC && component.type != cDefs.types.OTHER) {
+		return (quantity+"x "+info+" "+component.type);
+	} else {
+		return (quantity+"x "+info);
+	}
 }
 
 
@@ -132,5 +135,5 @@ const printBox = (store, box) => {
 module.exports = {
 	printComponent: printComponent,
 	printBox: printBox,
-	printComponentWithQuantity: printComponentWithQuantity
+	returnComponentWithQuantity: returnComponentWithQuantity
 }
