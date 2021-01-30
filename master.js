@@ -41,7 +41,7 @@ const {levenshtein, ratcliffObershelp} = require("./core/stringCompare.js");
 const {baseDir, bomBaseDir} = require("./core/baseDirectories.js");
 const CSVToComponentList = require("./core/CSVToComponentList.js");
 
-//Component manip stuff
+//Component manip stuff 
 const assignComponents = require("./core/assignComponents.js");
 
 //Settings
