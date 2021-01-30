@@ -16,10 +16,12 @@ async function getFilesInDir(dir) {
 
 const dirPicker = startDir => {
 	return new Promise((resolve, reject) => {
-		let potentialDirs = fs.readdirSync("./");
-		let dirs = [baseDir];
+		let base = startDir || baseDir;
+		let potentialDirs = fs.readdirSync(base);
+		let dirs = [];
+		if (base == baseDir) dirs.push(baseDir); //Make sure . dir is present in base
 		for (let i=0; i<potentialDirs.length; i++) {
-			let fullPath = path.join("./",potentialDirs[i]);
+			let fullPath = path.join(base,potentialDirs[i]);
 			if (fs.lstatSync(fullPath).isDirectory()) {
 				dirs.push(fullPath)
 			}

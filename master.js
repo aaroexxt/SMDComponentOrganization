@@ -2,14 +2,16 @@
 //Written by Aaron Becker later then he should be awake lol
 
 /*Todos:
-- when adding component, if already assigned tell where
 - Lookup function with box visualization, highlight in red where component would go
 - change rendering method to dynamically fill page (when get to too large, just create another page) instead of precomputing
 - finish component additional asking for other types (diode etc)
 - unassign function
 - 'auto' unit selection which will convert to best possible unit choice
 - check if component is valid before writing
-- activate/deactivate boxes
+
+- delete assigned or unassigned component capability
+
+- function to check which components in box are low
 */
 
 
@@ -21,14 +23,31 @@ const inquirer = require('inquirer');
 //Addtl files
 const { dirPicker, getFilesInDir } = require("./core/directoryUtils.js");
 const exportImages = require("./core/exportImages.js");
-const boxSelector = require("./core/boxSelector.js");
 
+//Component selectors
+const boxSelector = require("./core/boxSelector.js");
+const componentSelector = require("./core/componentSelector.js");
+const groupComponentSelector = require("./core/groupComponentSelector.js");
+
+//Definitions
 const cDefs = require("./core/componentDefinitions.js");
 const bDefs = require("./core/boxDefinitions.js");
 
-const {baseDir, bomBaseDir} = require("./core/baseDirectories.js");
+//Printing stuff
+const {printComponent, printComponentWithQuantity, printBox} = require("./core/printComponentBox.js");
 
+const componentLookup = require("./core/lookup.js");
+const {levenshtein, ratcliffObershelp} = require("./core/stringCompare.js");
+const {baseDir, bomBaseDir} = require("./core/baseDirectories.js");
+const CSVToComponentList = require("./core/CSVToComponentList.js");
+
+//Component manip stuff
+const assignComponents = require("./core/assignComponents.js");
+
+//Settings
 const strictComponentComparison = false; //enables strict checks like matching voltage range for capacitors in comparison
+const componentSimilarityThreshold = 0.55; //string compare threshold in CSV parsing
+const minComponentsBeforeWarning = 5; //minimum amount of components in box before warning
 
 var store = {
 	boxes: [],
@@ -53,780 +72,6 @@ const saveStoreFile = path => {
 		fs.writeFileSync(path, JSON.stringify(store));
 		return resolve(); //we will never get here if the code above fails
 	})
-}
-
-/*
-COMPONENT SELECTION
-*/
-
-const groupComponentSelector = () => {
-	return new Promise((resolve, reject) => {
-		//Base component to build value into
-		var component = {
-			additional: {}
-		};
-		//Setup choices
-		let componentChoices = ["Cancel"];
-		for (const prop in cDefs.groupTypes) {
-			componentChoices.push(cDefs.groupTypes[prop]);
-		};
-
-		let sizeChoices = [];
-		for (const prop in cDefs.smdSizes) {
-			sizeChoices.push(cDefs.smdSizes[prop]);
-		}
-
-		let manufacturerChoices = ["Other"];
-		cDefs.manufacturers.forEach(m => {
-			manufacturerChoices.push(m);
-		})
-
-		let numComponents;
-		let commonType, commonSize, commonQty, commonManuf;
-
-		//Ask user what they want
-		inquirer.prompt({
-			name: "cAmn",
-			message: "Enter number of components with common params to add:",
-			type: "number"
-		}).then(nc => {
-			numComponents = nc[Object.keys(nc)[0]];
-			inquirer.prompt({
-				name: "type",
-				message: "Pick a Component Type for Group",
-				type: "list",
-				choices: componentChoices,
-			}).then(choiceType => {
-				let keysCT = Object.keys(choiceType);
-				choiceType = choiceType[keysCT[0]];
-
-				if (choiceType == "Cancel") { //insta-return boii
-					return reject("cancelled");
-				}
-
-				inquirer.prompt({
-					name: "size",
-					message: "Pick Component Size for Group",
-					type: "list",
-					choices: sizeChoices
-				}).then(choiceSize => {
-					let keysSZ = Object.keys(choiceSize);
-					choiceSize = choiceSize[keysSZ[0]];
-
-
-					if (choiceSize == cDefs.smdSizes.ICPACKAGES) { //IC packages need more type information
-						selectICPackage().then(icPkg => {
-							choiceSize = "SMD-"+icPkg;
-							sizeDone(choiceType, choiceSize);
-						})
-					} else {
-						sizeDone(choiceType, choiceSize);
-					}
-
-					
-				})
-			})
-		})
-
-		function sizeDone(choiceType, choiceSize) { //For some components, we have a more complex flow with size, so this function seperates it out
-			inquirer.prompt({
-				name: "qty",
-				message: "Input Group Quantity:",
-				type: "number"
-			}).then(inputQTY => {
-				let keysQTY = Object.keys(inputQTY);
-				inputQTY = inputQTY[keysQTY[0]];
-
-				inquirer.prompt({
-					name: "mf",
-					message: "Choose Group Manufacturer",
-					type: "list",
-					choices: manufacturerChoices	
-				}).then(choiceManuf => {
-					let keysMF = Object.keys(choiceManuf);
-					choiceManuf = choiceManuf[keysMF[0]];
-
-					if (choiceManuf == "Other") {
-						inquirer.prompt({
-							name: "mpn",
-							message: "Input Group Manufacturer:",
-							type: "input"
-						}).then(inputMPN => {
-							let keysMPN = Object.keys(inputMPN);
-							inputMPN = inputMPN[keysMPN[0]];
-
-							commonType = choiceType;
-							commonSize = choiceSize;
-							commonQty = inputQTY;
-							commonManuf = inputMPN;
-							basicPromptsDone();
-						})
-					} else {
-						commonType = choiceType;
-						commonSize = choiceSize;
-						commonQty = inputQTY;
-						commonManuf = choiceManuf;
-						basicPromptsDone();
-					}
-				})
-			})
-		}
-
-		function basicPromptsDone() {
-			component.quantity = commonQty;
-			component.size = commonSize;
-			component.manufacturer = commonManuf;
-			component.uuid = generateUUID();
-			component.assigned = false;
-
-			//Now we ask for additional information
-			switch (commonType) {
-				case "Back":
-					return reject("back");
-					break;
-				case cDefs.types.RESISTOR: //Resistor
-					component.type = cDefs.types.RESISTOR;
-
-					inquirer.prompt({
-						name: "tol",
-						message: "Enter common tolerance (in %):",
-						type: "number"
-					}).then(tol => {
-						tol = tol[Object.keys(tol)[0]];
-
-						component.additional.tolerance = fixFloatRounding(tol);
-						component.additional.toleranceUnit = "%";
-
-						askN(0);
-					})
-					break;
-				case cDefs.types.CAPACITOR: //Capacitor
-					component.type = cDefs.types.CAPACITOR;
-
-					let toleranceUnitsLong = [];
-					let toleranceUnitsShort = [];
-					let toleranceMults = [];
-					cDefs.units[cDefs.types.CAPACITOR].tolerance.forEach(t => {
-						toleranceUnitsLong.push(t[0]);
-						toleranceUnitsShort.push(t[1]);
-						if (typeof t[2] == "undefined") {
-							toleranceMults.push(0);
-						} else {
-							toleranceMults.push(t[2]);
-						}
-						
-					})
-
-					inquirer.prompt({
-						name: "tolU",
-						message: "Pick a common tolerance unit",
-						type: "list",
-						choices: toleranceUnitsLong
-					}).then(tolUnit => {
-						tolUnit = tolUnit[Object.keys(tolUnit)[0]];
-						let idxT = toleranceUnitsLong.indexOf(tolUnit);
-
-						inquirer.prompt({
-							name: "tol",
-							message: "Enter common tolerance (in "+toleranceUnitsShort[idxT]+"):",
-							type: "number"
-						}).then(tol => {
-							tol = tol[Object.keys(tol)[0]];
-
-							inquirer.prompt({
-								name: "vol",
-								message: "Enter common max voltage (in V):",
-								type: "number"
-							}).then(maxV => {
-								maxV = maxV[Object.keys(maxV)[0]];
-
-								component.additional.maxVoltage = fixFloatRounding(maxV);
-								component.additional.maxVoltageUnit = "V";
-
-								component.additional.tolerance = fixFloatRounding(tol);
-								component.additional.toleranceUnit = toleranceUnitsShort[idxT];
-
-								askN(0);
-							})
-						})	
-					})
-					break;
-				default:
-					return reject("Something went wrong, that component type is not currently supported :(");
-					break;
-			}
-		}
-
-		function askN(n) {
-			console.log("Group component "+(n+1)+" of "+numComponents);
-			switch (component.type) {
-				case cDefs.types.RESISTOR:
-					let resistanceUnitsLong = [];
-					let resistanceUnitsShort = [];
-					let resistanceMults = [];
-					cDefs.units[cDefs.types.RESISTOR].resistance.forEach(r => {
-						resistanceUnitsLong.push(r[0]);
-						resistanceUnitsShort.push(r[1]);
-						resistanceMults.push(r[2]);
-					})
-
-					inquirer.prompt({
-						name: "unit",
-						message: "Pick a resistance unit",
-						type: "list",
-						choices: resistanceUnitsLong
-					}).then(resUnit => {
-						resUnit = resUnit[Object.keys(resUnit)[0]];
-						let idxR = resistanceUnitsLong.indexOf(resUnit);
-
-						inquirer.prompt({
-							name: "res",
-							message: "Enter resistance (in "+resistanceUnitsShort[idxR]+"):",
-							type: "number"
-						}).then(res => {
-							res = res[Object.keys(res)[0]];
-
-							component.additional.value = fixFloatRounding(res);
-							component.additional.valueUnit = resistanceUnitsShort[idxR];
-
-							let normResist = res*resistanceMults[idxR];
-							component.additional.normalizedValue = fixFloatRounding(normResist);
-							component.additional.normalizedValueUnit = cDefs.units[cDefs.types.RESISTOR].normUnit;
-							
-							doneN(n);
-						})
-					})
-					break;
-				case cDefs.types.CAPACITOR:
-					let capUnitsLong = [];
-					let capUnitsShort = [];
-					let capMults = [];
-					cDefs.units[cDefs.types.CAPACITOR].capacitance.forEach(c => {
-						capUnitsLong.push(c[0]);
-						capUnitsShort.push(c[1]);
-						capMults.push(c[2]);
-					});
-
-					inquirer.prompt({
-						name: "unit",
-						message: "Pick a capacitance unit",
-						type: "list",
-						choices: capUnitsLong
-					}).then(capUnit => {
-						capUnit = capUnit[Object.keys(capUnit)[0]];
-						let idxC = capUnitsLong.indexOf(capUnit);
-
-						inquirer.prompt({
-							name: "cap",
-							message: "Enter capacitance (in "+capUnitsShort[idxC]+"):",
-							type: "number"
-						}).then(cap => {
-							cap = cap[Object.keys(cap)[0]];
-
-							component.additional.value = fixFloatRounding(cap);
-							component.additional.valueUnit = capUnitsShort[idxC];
-							
-							let normCap = cap*capMults[idxC];
-							component.additional.normalizedValue = fixFloatRounding(normCap);
-							component.additional.normalizedUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
-
-
-							let toleranceUnitsLong = [];
-							let toleranceUnitsShort = [];
-							let toleranceMults = [];
-							cDefs.units[cDefs.types.CAPACITOR].tolerance.forEach(t => {
-								toleranceUnitsLong.push(t[0]);
-								toleranceUnitsShort.push(t[1]);
-								if (typeof t[2] == "undefined") {
-									toleranceMults.push(0);
-								} else {
-									toleranceMults.push(t[2]);
-								}
-								
-							})
-
-							let tolUnit = component.additional.toleranceUnit;
-							let tol = component.additional.tolerance;
-							let idxT = toleranceUnitsLong.indexOf(tolUnit);
-
-							let normCapTol;
-							if (tolUnit.indexOf("%") > -1) {
-								normCapTol = normCap*(tol/100);
-							} else {
-								normCapTol = tol*toleranceMults[idxT];
-							}
-							component.additional.normalizedTolerance = fixFloatRounding(normCapTol);
-							component.additional.normalizedToleranceUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
-
-							doneN(n);
-						})
-					})
-					break;
-			}
-		}
-
-		function doneN(n) {
-			component.uuid = generateUUID(); //randomize the UUID
-			addComponent(component);
-			if (n >= numComponents-1) {
-				return resolve();
-			} else {
-				askN(n+1);
-			}
-		}
-
-	});
-}
-const componentSelector = () => {
-	/*
-	We want to know manufacturer, type (resistor, cap, inductor, misc)
-	If cap, want to know rating (X7R, C0G, etc)
-
-	How to do component selection:
-	1) Select component type: Resistor, Capacitor, Other
-	2) Select component size: 0201, 0402, 0603, 0805, 1206, Discrete
-	3a) If resistor, ask
-	3b) If capacitor, ask type (X7R, C0G, etc)
-	3c) Ask for voltage rating 
-	3d) If res or cap ask for tolerance, value (no unit)
-	3e) if res ask for value unit (mO, o, kO, MO)
-	3f) if cap ask for value unit (pF, nF, uF, mF)
-	3g) if led ask for value unit (vForward)
-	5) Ask for manufacturer part no
-	6) Ask for qty
-
-	return json object with fields:
-	{
-		type: 0=resistor, 1=capacitor, 2-3, -1 = other,
-		size: 0=Discrete, 1=1206, 2=0805, 3=0603, 4=0402, 5=0201
-		manufacturer: manufactuer part number or "unknown"
-		qty: #qty
-		additional: {
-			tolerance: num or string <- for res or caps
-			value: num
-			valueUnit: "ohms, pF etc"
-			normalizedValue: <- convert thing measured in miliohms to ohms etc
-			normalizedUnit
-		}
-	}
-
-	component flow:
-	1) user fills out component
-	2) check against db: if found, ask to add and tell user what compartment it is assigned into
-	3) if not found, ask to assign to box or manual
-	*/
-
-	return new Promise((resolve, reject) => {
-		//Component object itself
-		var component = {
-			additional: {}
-		};
-
-		//Setup choices
-		let componentChoices = ["Cancel"];
-		for (const prop in cDefs.types) {
-			componentChoices.push(cDefs.types[prop]);
-		};
-
-		let sizeChoices = [];
-		for (const prop in cDefs.smdSizes) {
-			sizeChoices.push(cDefs.smdSizes[prop]);
-		}
-
-		let manufacturerChoices = ["Other"];
-		cDefs.manufacturers.forEach(m => {
-			manufacturerChoices.push(m);
-		})
-
-		//Ask user what they want
-		inquirer.prompt({
-			name: "type",
-			message: "Pick a Component Type",
-			type: "list",
-			choices: componentChoices,
-		}).then(choiceType => {
-			let keysCT = Object.keys(choiceType);
-			choiceType = choiceType[keysCT[0]];
-
-			if (choiceType == "Cancel") { //insta-return boii
-				return reject("cancelled");
-			}
-
-			inquirer.prompt({
-				name: "size",
-				message: "Pick Component Size",
-				type: "list",
-				choices: sizeChoices
-			}).then(choiceSize => {
-				let keysSZ = Object.keys(choiceSize);
-				choiceSize = choiceSize[keysSZ[0]];
-
-
-				if (choiceSize == cDefs.smdSizes.ICPACKAGES) { //IC packages need more type information
-					selectICPackage().then(icPkg => {
-						choiceSize = "SMD-"+icPkg;
-						sizeDone(choiceType, choiceSize);
-					})
-				} else {
-					sizeDone(choiceType, choiceSize);
-				}
-
-				
-			})
-		})
-
-		function sizeDone(choiceType, choiceSize) { //For some components, we have a more complex flow with size, so this function seperates it out
-			inquirer.prompt({
-				name: "qty",
-				message: "Input Quantity:",
-				type: "number"
-			}).then(inputQTY => {
-				let keysQTY = Object.keys(inputQTY);
-				inputQTY = inputQTY[keysQTY[0]];
-
-				inquirer.prompt({
-					name: "mf",
-					message: "Choose Manufacturer",
-					type: "list",
-					choices: manufacturerChoices	
-				}).then(choiceManuf => {
-					let keysMF = Object.keys(choiceManuf);
-					choiceManuf = choiceManuf[keysMF[0]];
-
-					if (choiceManuf == "Other") {
-						inquirer.prompt({
-							name: "mpn",
-							message: "Input Manufacturer:",
-							type: "input"
-						}).then(inputMPN => {
-							let keysMPN = Object.keys(inputMPN);
-							inputMPN = inputMPN[keysMPN[0]];
-
-							basicPromptsDone(choiceType, choiceSize, inputQTY, inputMPN);
-						})
-					} else {
-						basicPromptsDone(choiceType, choiceSize, inputQTY, choiceManuf);
-					}
-				})
-			})
-		}
-
-		function basicPromptsDone(type, size, qty, manuf) {
-			component.quantity = qty;
-			component.size = size;
-			component.manufacturer = manuf;
-			component.uuid = generateUUID();
-			component.assigned = false;
-
-			//Now we ask for additional information
-			switch (type) {
-				case "Back":
-					return reject("back");
-					break;
-				case cDefs.types.RESISTOR: //Resistor
-					component.type = cDefs.types.RESISTOR;
-					
-					let resistanceUnitsLong = [];
-					let resistanceUnitsShort = [];
-					let resistanceMults = [];
-					cDefs.units[cDefs.types.RESISTOR].resistance.forEach(r => {
-						resistanceUnitsLong.push(r[0]);
-						resistanceUnitsShort.push(r[1]);
-						resistanceMults.push(r[2]);
-					})
-
-					inquirer.prompt({
-						name: "unit",
-						message: "Pick a resistance unit",
-						type: "list",
-						choices: resistanceUnitsLong
-					}).then(resUnit => {
-						resUnit = resUnit[Object.keys(resUnit)[0]];
-						let idxR = resistanceUnitsLong.indexOf(resUnit);
-
-						inquirer.prompt({
-							name: "res",
-							message: "Enter resistance (in "+resistanceUnitsShort[idxR]+"):",
-							type: "number"
-						}).then(res => {
-							res = res[Object.keys(res)[0]];
-
-							inquirer.prompt({
-								name: "tol",
-								message: "Enter tolerance (in %):",
-								type: "number"
-							}).then(tol => {
-								tol = tol[Object.keys(tol)[0]];
-
-								component.additional.tolerance = fixFloatRounding(tol);
-								component.additional.toleranceUnit = "%";
-
-								component.additional.value = fixFloatRounding(res);
-								component.additional.valueUnit = resistanceUnitsShort[idxR];
-
-								let normResist = res*resistanceMults[idxR];
-								component.additional.normalizedValue = fixFloatRounding(normResist);
-								component.additional.normalizedValueUnit = cDefs.units[cDefs.types.RESISTOR].normUnit;
-
-								return resolve(component);
-							})	
-						})
-					})
-					break;
-				case cDefs.types.CAPACITOR: //Capacitor
-					component.type = cDefs.types.CAPACITOR;
-					
-					let capUnitsLong = [];
-					let capUnitsShort = [];
-					let capMults = [];
-					cDefs.units[cDefs.types.CAPACITOR].capacitance.forEach(c => {
-						capUnitsLong.push(c[0]);
-						capUnitsShort.push(c[1]);
-						capMults.push(c[2]);
-					})
-
-					let toleranceUnitsLong = [];
-					let toleranceUnitsShort = [];
-					let toleranceMults = [];
-					cDefs.units[cDefs.types.CAPACITOR].tolerance.forEach(t => {
-						toleranceUnitsLong.push(t[0]);
-						toleranceUnitsShort.push(t[1]);
-						if (typeof t[2] == "undefined") {
-							toleranceMults.push(0);
-						} else {
-							toleranceMults.push(t[2]);
-						}
-						
-					})
-
-					inquirer.prompt({
-						name: "unit",
-						message: "Pick a capacitance unit",
-						type: "list",
-						choices: capUnitsLong
-					}).then(capUnit => {
-						capUnit = capUnit[Object.keys(capUnit)[0]];
-						let idxC = capUnitsLong.indexOf(capUnit);
-
-						inquirer.prompt({
-							name: "cap",
-							message: "Enter capacitance (in "+capUnitsShort[idxC]+"):",
-							type: "number"
-						}).then(cap => {
-							cap = cap[Object.keys(cap)[0]];
-
-							inquirer.prompt({
-								name: "tolU",
-								message: "Pick a tolerance unit",
-								type: "list",
-								choices: toleranceUnitsLong
-							}).then(tolUnit => {
-								tolUnit = tolUnit[Object.keys(tolUnit)[0]];
-								let idxT = toleranceUnitsLong.indexOf(tolUnit);
-
-								inquirer.prompt({
-									name: "tol",
-									message: "Enter tolerance (in "+toleranceUnitsShort[idxT]+"):",
-									type: "number"
-								}).then(tol => {
-									tol = tol[Object.keys(tol)[0]];
-
-									inquirer.prompt({
-										name: "vol",
-										message: "Enter max voltage (in V):",
-										type: "number"
-									}).then(maxV => {
-										maxV = maxV[Object.keys(maxV)[0]];
-
-										component.additional.value = fixFloatRounding(cap);
-										component.additional.valueUnit = capUnitsShort[idxC];
-
-										component.additional.maxVoltage = fixFloatRounding(maxV);
-										component.additional.maxVoltageUnit = "V";
-
-										let normCap = cap*capMults[idxC];
-										component.additional.normalizedValue = fixFloatRounding(normCap);
-										component.additional.normalizedUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
-
-										component.additional.tolerance = fixFloatRounding(tol);
-										component.additional.toleranceUnit = toleranceUnitsShort[idxT];
-
-										let normCapTol;
-										if (tolUnit.indexOf("%") > -1) {
-											normCapTol = normCap*(tol/100);
-										} else {
-											normCapTol = tol*toleranceMults[idxT];
-										}
-										component.additional.normalizedTolerance = fixFloatRounding(normCapTol);
-										component.additional.normalizedToleranceUnit = cDefs.units[cDefs.types.CAPACITOR].normUnit;
-
-										return resolve(component);
-									})
-								})	
-							})	
-						})
-					})
-					break;
-				case cDefs.types.IC:
-					component.type = cDefs.types.IC;
-					inquirer.prompt({
-						name: "ident",
-						message: "Enter IC name or number (identifier):",
-						type: "input"
-					}).then(ident => {
-						ident = ident[Object.keys(ident)[0]];
-
-						inquirer.prompt({
-							name: "desc",
-							message: "Describe component:",
-							type: "input"
-						}).then(desc => {
-							desc = desc[Object.keys(desc)[0]];
-
-							component.additional.identifier = ident;
-							component.additional.description = desc;
-
-							return resolve(component);
-						});
-					})
-					break;
-				case cDefs.types.LED:
-					component.type = cDefs.types.LED;
-					inquirer.prompt({
-						name: "col",
-						message: "Pick color:",
-						type: "list",
-						choices: cDefs.ledColors
-					}).then(color => {
-						color = color[Object.keys(color)[0]];
-
-						if (color.toLowerCase().indexOf("other") > -1) { //"other"
-							inquirer.prompt({
-								name: "col2",
-								message: "Enter a color:",
-								type: "input"
-							}).then(customColor => {
-								customColor = customColor[Object.keys(customColor)[0]];
-								component.additional.color = customColor;
-
-								return resolve(component);
-							})
-						} else {
-							component.additional.color = color;
-
-							return resolve(component);
-						}
-					})
-					break;
-				case cDefs.types.CRYSTAL:
-					component.type = cDefs.types.CRYSTAL;
-					inquirer.prompt({
-						name: "timUnit",
-						message: "Pick freqency unit",
-						type: "list",
-						choices: cDefs.units[cDefs.types.CRYSTAL].frequency
-					}).then(freqChoice => {
-						freqChoice = freqChoice[Object.keys(freqChoice)[0]];
-
-						inquirer.prompt({
-							name: "freq",
-							message: "Enter frequency (in"+freqChoice+"):",
-							type: "input"
-						}).then(freq => {
-							freq = freq[Object.keys(freq)[0]];
-
-							inquirer.prompt({
-								name: "lCap",
-								message: "Enter load capacitance (pF):",
-								type: "input"
-							}).then(lCap => {
-								lCap = lCap[Object.keys(lCap)[0]];
-
-								component.additional.frequency = freq;
-								component.additional.frequencyUnit = freqChoice;
-								component.additional.loadCapacitance = lCap;
-								component.additional.loadCapacitanceUnit = "pF";
-
-								return resolve(component);
-							})
-						})
-					})
-					break;
-				case cDefs.types.OTHER:
-					component.type = cDefs.types.OTHER;
-					inquirer.prompt({
-						name: "ident",
-						message: "Enter component name or number (identifier):",
-						type: "input"
-					}).then(ident => {
-						ident = ident[Object.keys(ident)[0]];
-
-						inquirer.prompt({
-							name: "desc",
-							message: "Describe component:",
-							type: "input"
-						}).then(desc => {
-							desc = desc[Object.keys(desc)[0]];
-
-							component.additional.identifier = ident;
-							component.additional.description = desc;
-
-							return resolve(component);
-						});
-					})
-					break;
-				default:
-					return reject("Something went wrong, that component type is not currently supported :(");
-					break;
-			}
-		}
-
-	});
-}
-
-const selectICPackage = () => {
-	return new Promise((resolve, reject) => {
-		let outerChoices = [];
-		for (const prop in cDefs.ICPackages) {
-			outerChoices.push(prop);
-		}
-		function outer() {
-			inquirer.prompt({
-				name: "outTyp",
-				message: "Select package type (general)",
-				type: "list",
-				choices: outerChoices
-			}).then(c => {
-				c = c[Object.keys(c)[0]];
-				inner(c);
-			})
-		}
-		function inner(sel) {
-			let innerChoices = ["Back"];
-			cDefs.ICPackages[sel].forEach(p => {
-				innerChoices.push(p);
-			})
-			inquirer.prompt({
-				name: "inTyp",
-				message: "Select specific type",
-				type: "list",
-				choices: innerChoices
-			}).then(c => {
-				c = c[Object.keys(c)[0]];
-				if (c.toLowerCase().indexOf("back") > -1) {
-					outer();
-				} else {
-					return resolve(c);
-				}
-			})
-		}
-
-		outer();
-	})
-}
-
-function fixFloatRounding(number) {
-    return parseFloat(parseFloat(number).toPrecision(12)); //hey it's jank but it works
 }
 
 const componentCompare = (a, b) => {
@@ -866,6 +111,25 @@ const componentCompare = (a, b) => {
 	}
 
 	return true; //If you get here, wowowow congrats there's truly a duplicate component
+}
+
+const approxComponentCompare = (a, b) => {
+	if (a.type != b.type) return false;
+	if (a.size != b.size) return false;
+
+	let aAdd = a.additional;
+	let bAdd = b.additional;
+	switch (a.type) {
+		case cDefs.types.RESISTOR:
+		case cDefs.types.CAPACITOR:
+			if (aAdd.normalizedValue != bAdd.normalizedValue) return false;
+			break;
+		default:
+			return false;
+			break;
+	}
+
+	return true;
 }
 
 const addComponent = component => {
@@ -915,351 +179,6 @@ const addComponent = component => {
 		}
 	}
 	return true;
-}
-
-const assignComponents = () => {
-	return new Promise((resolve, reject) => {
-		let cAssign = [];
-		for (let i=0; i<store.components.length; i++) {
-			if (!store.components[i].assigned) {
-				cAssign.push([i, store.components[i]]); //idx, component
-			}
-		}
-
-		if (cAssign.length == 0) {
-			console.log("No components left to assign!");
-			return resolve();
-		} else {
-			console.log(cAssign.length+" components left to assign");
-
-			let assignN = n => {
-				console.log("Assigning component "+(n+1)+" of "+cAssign.length);
-				printComponent(store.components[cAssign[n][0]]);
-
-				let availableBoxes = []; //box idx
-				for (let i=0; i<store.boxes.length; i++) {
-					let filled = true;
-					let box = store.boxes[i];
-					let space = getSpaceInBox(box);
-					if (space > 0 && box.selectable) { //is it open and selectable?
-						availableBoxes.push([i, space]);
-					}
-				}
-				if (availableBoxes.length == 0) {
-					console.warn("No boxes available! Add one before trying to assign components");
-					return reject("No boxes available! Add one before trying to assign components");
-				}
-
-				console.log("Boxes available: "+availableBoxes.length);
-
-				let availBoxTitles = [];
-				for (let i=0; i<availableBoxes.length; i++) {
-					availBoxTitles.push("Name: '"+store.boxes[availableBoxes[i][0]].title+"', freeSpace="+availableBoxes[i][1]);
-				}
-
-				inquirer.prompt({
-					name: "bSel",
-					message: "Select a box for component",
-					type: "list",
-					choices: availBoxTitles
-				}).then(bSel => {
-					bSel = bSel[Object.keys(bSel)[0]];
-					let bIdx = 0; //global store box id
-					for (let i=0; i<store.boxes.length; i++) {
-						if (bSel.indexOf(store.boxes[i].title) > -1) {
-							bIdx = i;
-							break;
-						}
-					}
-					let box = store.boxes[bIdx];
-
-					printBox(box);
-
-					let assignComponent = () => {
-						let methodChoices = ["AutoAssign", "Manually", "Cancel"];
-						let sectionChoices = [];
-						for (let i=0; i<box.sections.length; i++) {
-							let sectionAvailable = false;
-							for (let j=0; j<box.sections[i].assignments.length; j++) {
-								for (let b=0; b<box.sections[i].assignments[j].length; b++) {
-									if (box.sections[i].assignments[j][b] == "") {
-										sectionAvailable = true;
-										sectionChoices.push([i, methodChoices.length]); //push index of section and index of choice
-										methodChoices.push("AutoAssign to Section "+(i+1)+" of type '"+box.sections[i].type+"'");
-										break;
-									}
-								}
-								if (sectionAvailable) break;
-							}
-							
-						}
-						inquirer.prompt({
-							name: "aSel",
-							message: "Pick assignment method",
-							type: "list",
-							choices: methodChoices
-						}).then(method => {
-							method = method[Object.keys(method)[0]];
-
-							if (method == methodChoices[0]) { //AutoAssign gang rise up
-								let assigned = false;
-								for (let i=0; i<box.sections.length; i++) {
-									for (let j=0; j<box.sections[i].assignments.length; j++) {
-										for (let b=0; b<box.sections[i].assignments[j].length; b++) {
-											/*
-											Steps to assign box UUIDs
-
-											1) Put component UUID in box assignment field
-											2) Set "assigned" flag in component
-											*/
-											if (box.sections[i].assignments[j][b] == "") {
-												store.boxes[bIdx].sections[i].assignments[j][b] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
-												store.components[cAssign[n][0]].assigned = true;
-												console.log("AutoAssigned to row="+(j+1)+", col="+(b+1));
-
-												assigned = true;
-												break;
-											}
-										}
-										if (assigned) break;
-									}
-									if (assigned) break;
-								}
-								if (n >= cAssign.length-1) {
-									return resolve();
-								} else {
-									assignN(n+1);
-								}
-							} else if (method == methodChoices[1]) {
-								let sectionOptions = [];
-								for (let i=0; i<box.sections.length; i++) {
-									sectionOptions.push("Section "+(i+1)+" of type '"+box.sections[i].type+"'");
-								}
-								inquirer.prompt({
-									name: "bSec",
-									message: "Pick a section to put component in",
-									type: "list",
-									choices: sectionOptions
-								}).then(sec => {
-									sec = sec[Object.keys(sec)[0]];
-
-									let secIdx = sectionOptions.indexOf(sec);
-
-									let section = box.sections[secIdx];
-									
-									let rowOptions = [];
-									let columnOptions = [];
-									for (let i=0; i<section.height; i++) {
-										rowOptions.push("Row "+(i+1));
-									}
-									for (let i=0; i<section.width; i++) {
-										columnOptions.push("Column "+(i+1));
-									}
-									inquirer.prompt({
-										name: "bRow",
-										message: "Pick a row",
-										type: "list",
-										choices: rowOptions
-									}).then(row => {
-										inquirer.prompt({
-											name: "bCol",
-											message: "Pick a column",
-											type: "list",
-											choices: columnOptions
-										}).then(col => {
-											row = row[Object.keys(row)[0]];
-											col = col[Object.keys(col)[0]];
-
-											let rowIdx = rowOptions.indexOf(row);
-											let colIdx = columnOptions.indexOf(col);
-
-											if (section.assignments[rowIdx][colIdx] == "") { //it's empty so we gucci
-												store.boxes[bIdx].sections[secIdx].assignments[rowIdx][colIdx] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
-												store.components[cAssign[n][0]].assigned = true;
-
-												if (n >= cAssign.length-1) {
-													return resolve();
-												} else {
-													assignN(n+1);
-												}
-											} else { //spot filled
-												console.log("That spot is currently filled. Try again");
-												assignComponent();
-											}
-										})
-									})
-								})
-							} else if (method == methodChoices[2]) { //just cancel
-								return resolve();
-							} else {
-								let methodIdx = methodChoices.indexOf(method);
-								let assigned = false;
-								for (let i=0; i<sectionChoices.length; i++) {
-									if (sectionChoices[i][1] == methodIdx) {
-										let sectionIdx = sectionChoices[i][0];
-
-										for (let j=0; j<box.sections[sectionIdx].assignments.length; j++) {
-											for (let b=0; b<box.sections[sectionIdx].assignments[j].length; b++) {
-												/*
-												Steps to assign box UUIDs
-
-												1) Put component UUID in box assignment field
-												2) Set "assigned" flag in component
-												*/
-												if (box.sections[sectionIdx].assignments[j][b] == "") {
-													store.boxes[bIdx].sections[sectionIdx].assignments[j][b] = store.components[cAssign[n][0]].uuid; //i think my brain just exploded thats a lot of variables
-													store.components[cAssign[n][0]].assigned = true;
-													console.log("AutoAssigned in section "+(sectionIdx+1)+"to row="+(j+1)+", col="+(b+1));
-
-													assigned = true;
-													break;
-												}
-											}
-											if (assigned) break;
-										}
-										if (assigned) break;
-									}
-								}
-
-								if (assigned) {
-									if (n >= cAssign.length-1) {
-										return resolve();
-									} else {
-										assignN(n+1);
-									}
-								} else {
-									console.log("Something went wrong... no free space in section? Running component again");
-									assignN(n);
-								}
-							}
-						})
-
-					}
-					assignComponent();
-				})
-			}
-			assignN(0);
-		}
-	})
-}
-
-const printComponent = component => {
-	let info;
-	switch(component.type) {
-		case cDefs.types.RESISTOR:
-		case cDefs.types.CAPACITOR:
-			info = "value "+component.additional.value+component.additional.valueUnit;
-			break;
-		case cDefs.types.IC:
-		case cDefs.types.OTHER:
-			info = "identifier "+component.additional.identifier;
-			break;
-		case cDefs.types.CRYSTAL:
-			info = "frequency "+component.additional.frequency+component.additional.frequencyUnit;
-			break;
-		case cDefs.types.LED:
-			info = "color "+component.additional.color;
-			break;
-		default:
-			info = "unknown info";
-			break;
-	}
-	info+= " of size '"+component.size+"'";
-	console.log("Component: "+component.type+" with "+info);
-	return;
-}
-
-const printBox = box => {
-	/*
-	Ex visualization
-	Section Type: Small
-	|-------------------------------|
-	|0pf	| 1pf	| 2pf	| EMPTY	|
-	|-------|-------|-------|-------|
-
-
-	*/
-	for (let i=0; i<box.sections.length; i++) {
-		let section = box.sections[i];
-
-		console.log("Section Type: "+section.type);
-		let am = section.assignments;
-
-		let divider = "";
-		for (let j=0; j<section.width*8; j++) {
-			divider+=(j == 0)?"|" : (j==(section.width*8-1)) ? "-|" : "-";
-		}
-
-		for (let j=0; j<am.length; j++) { //for each row
-			console.log(divider); //print divider
-
-			let printStr = "|";
-			for (let b=0; b<am[j].length; b++) {
-				if (am[j][b] == "") {
-					printStr += "   *\t|";
-				} else {
-					let component = componentLookup(am[j][b]); //get component info
-
-					let info = "";
-					switch(component.type) {
-						case cDefs.types.RESISTOR:
-						case cDefs.types.CAPACITOR:
-							info = component.additional.value+component.additional.valueUnit;
-							break;
-						case cDefs.types.IC:
-						case cDefs.types.OTHER:
-							info = component.additional.identifier;
-							break;
-						case cDefs.types.CRYSTAL:
-							info = component.additional.frequency+component.additional.frequencyUnit;
-							break;
-						case cDefs.types.LED:
-							info = component.additional.color;
-							break;
-						default:
-							info = "*";
-							break;
-					}
-					info = info.substring(0,7);
-					let iLen = info.length;
-					let padLength = Math.floor((7-info.length)/2); //do we need to pad it out
-					if (padLength >= 1) {
-						for (let i=0; i<padLength; i++) {
-							info = " "+info; //preappend space
-						}
-					}
-
-					printStr += info+((iLen == 7)?"|":"\t|");
-				}
-			}
-			console.log(printStr);
-		}
-		console.log(divider);
-	}
-}
-
-const componentLookup = uuid => {
-	for (let i=0; i<store.components.length; i++) {
-		if (store.components[i].uuid == uuid) {
-			return store.components[i];
-		}
-	}
-	return false;
-}
-
-const getSpaceInBox = box => {
-	let s = 0;
-	for (let i=0; i<box.sections.length; i++) {
-		for (let j=0; j<box.sections[i].assignments.length; j++) {
-			for (let b=0; b<box.sections[i].assignments[j].length; b++) {
-				if (box.sections[i].assignments[j][b] == "") {
-					s++;
-				}
-			}
-		}
-	}
-
-	return s;
 }
 
 const actDeactBoxes = () => {
@@ -1397,9 +316,7 @@ const afterMain = () => {
 		} else if (choice == mChoices[1]) { //delete
 			deleteComponentMenu();
 		} else if (choice == mChoices[2]) {
-			assignComponents().then(() => {
-				afterMain();
-			}).catch(() => {
+			assignComponents(store).then(() => {
 				afterMain();
 			})
 		} else if (choice == mChoices[3]) {
@@ -1422,7 +339,7 @@ const afterMain = () => {
 					for (let j=0; j<box.sections.length; j++) {
 						console.log("\t"+box.sections[j].type+": W="+box.sections[j].width+", H="+box.sections[j].height);
 					}
-					printBox(box);
+					printBox(store, box);
 					console.log("\n");
 				}
 			}
@@ -1506,7 +423,7 @@ const afterMain = () => {
 				})
 			});
 		} else if (choice == mChoices[7]) {
-
+			BOMMenu();
 		} else if (choice == mChoices[8]) {
 			let c = ["Quit", "Don't Quit"]
 			inquirer.prompt({
@@ -1556,8 +473,8 @@ const addComponentMenu = () => {
 				let groupAdd = mChoice.indexOf(multiComponentChoices[1]) > -1;
 
 				if (groupAdd) {
-					groupComponentSelector().then(() => {
-						console.log("Added components successfully");
+					groupComponentSelector().then(list => {
+						list.forEach(component => addComponent(component));
 						afterMain();
 					}).catch(() => {
 						afterMain();
@@ -1644,6 +561,206 @@ const deleteComponentMenu = () => {
 			}).catch(() => {
 				afterMain();
 			})
+		}
+	})
+}
+
+const BOMMenu = () => {
+	let mChoices = ["Back", "Eagle BOM CSV"];
+	inquirer.prompt({
+		name: "eBom",
+		message: "Pick an option",
+		choices: mChoices,
+		type: "list"
+	}).then(choice => {
+		choice = choice[Object.keys(choice)[0]];
+
+		if (choice == mChoices[0]) {
+			afterMain();
+		} else {
+			dirPicker(bomBaseDir).then(dirs => {
+				getFilesInDir(dirs).then(files => {
+					if (files.length == 0) {
+						console.log("Oop no files found in folder, pick another project");
+						BOMMenu();
+					} else {
+						let csvs = [];
+						for (let i=0; i<files.length; i++) {
+							if (files[i].toLowerCase().indexOf(".csv") > -1) {
+								csvs.push(files[i]);
+							}
+						}
+
+						switch (csvs.length) {
+							case 0:
+								console.error("Oop no CSV files found, pick another project");
+								BOMMenu();
+								break;
+							case 1:
+								csvFound(csvs[0]);
+								break;
+							default:
+								inquirer.prompt({
+									name: "Pick a CSV file",
+									type: "list",
+									choices: csvs
+								}).then(csvchoice => {
+									let keys = Object.keys(csvchoice);
+
+									csvFound(csvchoice[keys[0]]);
+								}).catch(err => {
+									console.error(err);
+								});
+								break;
+						}
+					}
+				})
+			})
+
+			const csvFound = path => {
+				inquirer.prompt({
+					name: "amt",
+					message: "Amount of this project that are being made?",
+					type: "number"
+				}).then(amnt => {
+					amnt = amnt[Object.keys(amnt)[0]];
+					
+					CSVToComponentList(path, amnt).then(components => {
+						console.log("Checking parsed components against store...");
+
+						let foundComponents = [];
+						let notFoundComponents = [];
+
+
+						/*
+						STEP 1: iterate through component store and see if there are any matches
+						*/
+
+						for (let i=0; i<components.length; i++) {
+							let component = components[i];
+
+							switch (component.type) {
+								case cDefs.types.RESISTOR: //For these two, the normalizedValue stuff should be ready to use
+								case cDefs.types.CAPACITOR:
+									let found = false;
+									for (let j=0; j<store.components.length; j++) {
+										let storeComponent = store.components[j];
+										if (approxComponentCompare(component, storeComponent)) {
+											foundComponents.push([j, component.quantity]);
+											// console.log("HIT STORE for "+component.value+", "+component.size);
+											found = true;
+											break;
+										}
+									}
+									// if (!found) console.log("NOHIT store for "+component.value+", "+component.size);
+									if (!found) notFoundComponents.push([component, component.quantity]);
+									break;
+								//case cDefs.types.LED:
+								default:
+									let maxSimilar = similarIdx = -1;
+									for (let j=0; j<store.components.length; j++) {
+										let storeComponent = store.components[j];
+										let compareTo;
+										switch (storeComponent.type) {
+											case cDefs.types.IC:
+											case cDefs.types.OTHER:
+												compareTo = storeComponent.additional.identifier;
+												break;
+											case cDefs.types.CRYSTAL:
+												compareTo = storeComponent.additional.frequency+storeComponent.additional.frequencyUnit;
+												break;
+											case cDefs.types.LED:
+												compareTo = storeComponent.additional.color;
+												break;
+											default:
+												continue; //skip loop if it didn't find it
+												break;
+										}
+										let similarity = ratcliffObershelp(component.value, compareTo);
+
+										if (similarity > maxSimilar) {
+											maxSimilar = similarity;
+											similarIdx = j;
+										}
+									}
+
+									if (maxSimilar > componentSimilarityThreshold) { //make sure it matches enough
+										// console.log("CHIT STORE for "+component.value+", "+component.size);
+										foundComponents.push([similarIdx, component.quantity]);
+									} else {
+										notFoundComponents.push([component, component.quantity]);
+										// console.log("CNOHIT store for "+component.value+", "+component.size);
+									}
+
+									break;
+							}
+						}
+
+						/*
+						STEP 2: take components found in store, subtract quantities and find out if store has enough
+						*/
+						let enoughComponents = [];
+						let notEnoughComponents = [];
+
+						for (let i=0; i<foundComponents.length; i++) {
+							let matchIdx = foundComponents[i][0];
+							let quantity = foundComponents[i][1];
+
+							store.components[matchIdx].quantity -= quantity; //subtract quantity since we're using them
+
+							if (store.components[matchIdx].assigned) {
+								let uuid = store.components[matchIdx].uuid;
+
+								let found = false;
+								for (let z=0; z<store.boxes.length; z++) {
+									let box = store.boxes[z];
+									for (let i=0; i<box.sections.length; i++) {
+										for (let j=0; j<box.sections[i].assignments.length; j++) {
+											for (let b=0; b<box.sections[i].assignments[j].length; b++) {
+												if (box.sections[i].assignments[j][b] == uuid) { //check uuid match
+
+													let loc = "B"+(z+1)+"-"+"S"+(i+1)+"-"+(j+1)+"-"+(b+1);
+													if (store.components[matchIdx].quantity > minComponentsBeforeWarning) {
+														enoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, true, loc]);
+													} else {
+														notEnoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, true, loc]);
+													}
+
+													found = true;
+													break;
+												}
+											}
+											if (found) break;
+										}
+										if (found) break;
+									}
+								}
+							} else {
+								if (store.components[matchIdx].quantity > minComponentsBeforeWarning) {
+									enoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, false]);
+								} else {
+									notEnoughComponents.push([store.components[matchIdx], store.components[matchIdx].quantity, false]);
+								}
+							}
+						}
+
+						console.log("You have enough of the following components:");
+						for (let i=0; i<enoughComponents.length; i++) {
+							printComponentWithQuantity(enoughComponents[i][0]);
+						}
+
+						console.log("\n\nYou should consider ordering more of the following components:");
+						for (let i=0; i<notEnoughComponents.length; i++) {
+							printComponentWithQuantity(notEnoughComponents[i][0]);
+						}
+
+						console.log("\n\nThe following components aren't stocked and need to be ordered:");
+						for (let i=0; i<notFoundComponents.length; i++) {
+							printComponentWithQuantity(notFoundComponents[i][0]);
+						}
+					})
+				})
+			}
 		}
 	})
 }

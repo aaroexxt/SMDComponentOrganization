@@ -165,10 +165,10 @@ const manufacturers = [
 
 const resistorUnits = {
 	resistance: [
-		["ohms (Ω)", "Ω", 1], //full unit, shorthand for printing, normalized value
+		["ohms (Ω)", "Ω", 1], //full unit, shorthand for printing, normalized value, strict caps comparison
 		["kiloOhms (kΩ)", "kΩ", 1000],
-		["megaOhms (MΩ)", "MΩ", 1000000],
-		["milliOhms (mΩ)", "mΩ", 0.001],
+		["megaOhms (MΩ)", "MΩ", 1000000, true],
+		["milliOhms (mΩ)", "mΩ", 0.001, true],
 	],
 	normUnit: "Ω"
 }
