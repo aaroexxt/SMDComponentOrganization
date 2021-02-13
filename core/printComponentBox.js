@@ -1,4 +1,4 @@
-const componentLookup = require("./lookup.js");
+const {componentLookup} = require("./lookup.js");
 const cDefs = require("./componentDefinitions.js");
 
 const printComponent = component => {

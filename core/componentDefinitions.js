@@ -5,8 +5,7 @@ const componentTypes = {
 	CRYSTAL: "Crystal", //done
 	LED: "LED", //done
 	IC: "IC/Transistor/Diode/Inductor", //done
-	MECHANICAL: "Mechanical",
-	OTHER: "Other" //done
+	OTHER: "Mechanical/Other" //done
 };
 const groupComponentTypes = {
 	RESISTOR: "Resistor",
@@ -18,8 +17,9 @@ const SMDpackageSizes = {
 	S0402: "0402",
 	ICPACKAGES: "SMDPackages",
 	DISCRETE: "Discrete",
-	S1206: "1206",
-	S0201: "0201"
+	NONSTANDARD: "Nonstandard",
+	S0201: "0201",
+	S1206: "1206"
 };
 
 const ICPackages = {

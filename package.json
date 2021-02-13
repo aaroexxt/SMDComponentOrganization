@@ -23,5 +23,11 @@
   "bugs": {
     "url": "https://github.com/aaroexxt/SMDComponentOrganization/issues"
   },
-  "homepage": "https://github.com/aaroexxt/SMDComponentOrganization#readme"
+  "homepage": "https://github.com/aaroexxt/SMDComponentOrganization#readme",
+  "dependencies": {
+    "canvas": "^2.6.1",
+    "fs": "0.0.1-security",
+    "inquirer": "^7.3.3",
+    "path": "^0.12.7"
+  }
 }

@@ -12,6 +12,9 @@
 - delete assigned or unassigned component capability
 
 - function to check which components in box are low
+
+- DO THIS RN: ABILITY TO DELETE RECENTLY ASSIGNED COMPONENTS
+- todo: make components that sometimes have model numbers (LED, Crystal, etc) be factored into pcb search
 */
 
 
@@ -22,7 +25,7 @@ const inquirer = require('inquirer');
 
 //Addtl files
 const { dirPicker, getFilesInDir } = require("./core/directoryUtils.js");
-const exportImages = require("./core/exportImages.js");
+const {exportImages, exportComponentList} = require("./core/exportImages.js");
 
 //Component selectors
 const boxSelector = require("./core/boxSelector.js");
@@ -36,7 +39,7 @@ const bDefs = require("./core/boxDefinitions.js");
 //Printing stuff
 const {printComponent, returnComponentWithQuantity, printBox} = require("./core/printComponentBox.js");
 
-const componentLookup = require("./core/lookup.js");
+const {componentLookup, getSpaceInBox} = require("./core/lookup.js");
 const {levenshtein, ratcliffObershelp} = require("./core/stringCompare.js");
 const {baseDir, bomBaseDir} = require("./core/baseDirectories.js");
 const CSVToComponentList = require("./core/CSVToComponentList.js");
@@ -55,6 +58,7 @@ var store = {
 	componentTotal: -1,
 	boxTotal: -1
 }
+var sessionComponents = []; //new components added in this session
 
 /*
 FILE HANDLING
@@ -175,6 +179,7 @@ const addComponent = component => {
 			}
 		} else { //if different just add it into the list
 			store.components.push(component);
+			sessionComponents.push(component);
 			store.componentTotal++;
 		}
 	}
@@ -302,7 +307,7 @@ const main = () => {
 }
 
 const afterMain = () => {
-	const mChoices = ["Add (Component, Box)", "Delete (Component, Box)", "Assign (Component)", "Edit Selectability (Box)", "Storage Info", "Save Data File", "Export Labels", "BOM Management", "Exit"];
+	const mChoices = ["Add (Component, Box)", "Delete (Component, Box)", "Assign (Component)", "Edit Selectability (Box)", "Storage Info", "Save Data File", "Export Labels", "Export Session Labels", "BOM Management", "Exit"];
 	inquirer.prompt({
 		name: "mC",
 		message: "Choose an action",
@@ -422,6 +427,22 @@ const afterMain = () => {
 					afterMain();
 				})
 			});
+		} else if (choice == mChoices[7]) {
+			if (sessionComponents.length == 0) {
+				console.log("No new components added this session to save!");
+				afterMain();
+			} else {
+				console.log("Pick save directory for the session images:");
+				dirPicker(baseDir).then(dir => {
+					exportComponentList(sessionComponents, store.boxes, dir, "sessionLabels").then(() => {
+						console.log("Exported session images successfully!");
+						afterMain();
+					}).catch(e => {
+						console.error("There was an error saving the images: "+e);
+						afterMain();
+					})
+				});
+			}
 		} else if (choice == mChoices[7]) {
 			BOMMenu();
 		} else if (choice == mChoices[8]) {

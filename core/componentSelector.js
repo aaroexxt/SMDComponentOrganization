@@ -317,29 +317,38 @@ const componentSelector = () => {
 				case cDefs.types.LED:
 					component.type = cDefs.types.LED;
 					inquirer.prompt({
-						name: "col",
-						message: "Pick color:",
-						type: "list",
-						choices: cDefs.ledColors
-					}).then(color => {
-						color = color[Object.keys(color)[0]];
+						name: "idt",
+						message: "Enter LED identifier or model number:",
+						type: "input"
+					}).then(ident => {
+						ident = ident[Object.keys(ident)[0]];
+						component.additional.identifier = ident;
 
-						if (color.toLowerCase().indexOf("other") > -1) { //"other"
-							inquirer.prompt({
-								name: "col2",
-								message: "Enter a color:",
-								type: "input"
-							}).then(customColor => {
-								customColor = customColor[Object.keys(customColor)[0]];
-								component.additional.color = customColor;
+						inquirer.prompt({
+							name: "col",
+							message: "Pick color:",
+							type: "list",
+							choices: cDefs.ledColors
+						}).then(color => {
+							color = color[Object.keys(color)[0]];
+
+							if (color.toLowerCase().indexOf("other") > -1) { //"other"
+								inquirer.prompt({
+									name: "col2",
+									message: "Enter a color:",
+									type: "input"
+								}).then(customColor => {
+									customColor = customColor[Object.keys(customColor)[0]];
+									component.additional.color = customColor;
+
+									return resolve(component);
+								})
+							} else {
+								component.additional.color = color;
 
 								return resolve(component);
-							})
-						} else {
-							component.additional.color = color;
-
-							return resolve(component);
-						}
+							}
+						})
 					})
 					break;
 				case cDefs.types.CRYSTAL:
@@ -354,7 +363,7 @@ const componentSelector = () => {
 
 						inquirer.prompt({
 							name: "freq",
-							message: "Enter frequency (in"+freqChoice+"):",
+							message: "Enter frequency (in "+freqChoice+"):",
 							type: "input"
 						}).then(freq => {
 							freq = freq[Object.keys(freq)[0]];
@@ -366,12 +375,21 @@ const componentSelector = () => {
 							}).then(lCap => {
 								lCap = lCap[Object.keys(lCap)[0]];
 
-								component.additional.frequency = freq;
-								component.additional.frequencyUnit = freqChoice;
-								component.additional.loadCapacitance = lCap;
-								component.additional.loadCapacitanceUnit = "pF";
+								inquirer.prompt({
+									name: "idt",
+									message: "Enter crystal identifier or model number:",
+									type: "input"
+								}).then(ident => {
+									ident = ident[Object.keys(ident)[0]];
 
-								return resolve(component);
+									component.additional.identifier = ident;
+									component.additional.frequency = freq;
+									component.additional.frequencyUnit = freqChoice;
+									component.additional.loadCapacitance = lCap;
+									component.additional.loadCapacitanceUnit = "pF";
+									
+									return resolve(component);
+								})								
 							})
 						})
 					})
