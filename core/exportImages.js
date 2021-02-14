@@ -250,8 +250,10 @@ const exportImages = (store, dir) => { //Will export images from store
 			ctx.fillStyle = '#000';
 			let y = inToPx(0.066);
 			for (let j=0; j<Math.min(boxPrintInfo.length,boxesPerSheet); j++) {
-				canvasRoundRect(ctx, 20, y, canvasWidthPx-40, heightBoxLabel, 50, false, true);
+				if (!boxPrintInfo[boxIdx]) break;
 				
+				canvasRoundRect(ctx, 20, y, canvasWidthPx-40, heightBoxLabel, 50, false, true);
+
 				let title = boxPrintInfo[boxIdx][0].substring(0, 16).trim();
 				let desc = boxPrintInfo[boxIdx][1].substring(0, 50).trim();	
 				let bn = ("#"+boxPrintInfo[boxIdx][2]).trim();

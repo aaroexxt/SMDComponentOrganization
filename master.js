@@ -176,6 +176,11 @@ const addComponent = component => {
 						if (found) break;
 					}
 				}
+				if (!found) {
+					console.warn("The merged component has been assigned, but could not be located within any box.");
+				}
+			} else {
+				console.log("The merged component has not yet been assigned, and as such a location cannot be provided.");
 			}
 		} else { //if different just add it into the list
 			store.components.push(component);
@@ -340,7 +345,7 @@ const afterMain = () => {
 
 				for (let i=0; i<store.boxes.length; i++) {
 					let box = store.boxes[i];
-					console.log("Box '"+box.title+"' has "+box.sections.length+" sections");
+					console.log("Box '"+box.title+"' has "+box.sections.length+" section(s)");
 					for (let j=0; j<box.sections.length; j++) {
 						console.log("\t"+box.sections[j].type+": W="+box.sections[j].width+", H="+box.sections[j].height);
 					}
@@ -365,9 +370,14 @@ const afterMain = () => {
 				}
 			}
 
+			let entryTotal = 0;
+			let componentTotal = 0;
 			for (let i=0; i<counts.length; i++) {
-				console.log(counts[i][0]+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]); //another funky fresh oneliner from yours truly
+				console.log(counts[i][0].substring(0, 15)+((counts[i][0].length > 7)?"\t":"\t\t")+counts[i][1]+"\t\t"+counts[i][2]); //another funky fresh oneliner from yours truly
+				entryTotal+=counts[i][1];
+				componentTotal+=counts[i][2];
 			}
+			console.log("\nTOTAL\t\t"+entryTotal+"\t\t"+componentTotal);
 			console.log("\n~~~~ End Storage Info ~~~~");
 
 			afterMain(); //return to main
@@ -421,9 +431,6 @@ const afterMain = () => {
 			dirPicker(baseDir).then(dir => {
 				exportImages(store, dir).then(() => {
 					console.log("Exported images successfully!");
-					afterMain();
-				}).catch(e => {
-					console.error("There was an error saving the images: "+e);
 					afterMain();
 				})
 			});

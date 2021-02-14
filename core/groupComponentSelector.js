@@ -315,7 +315,7 @@ const groupComponentSelector = () => {
 
 		function doneN(n) {
 			component.uuid = generateUUID(); //randomize the UUID
-			generatedComponentList.push(component);
+			generatedComponentList.push(JSON.parse(JSON.stringify(component))); //break dependence
 			if (n >= numComponents-1) {
 				return resolve(generatedComponentList);
 			} else {
@@ -324,6 +324,47 @@ const groupComponentSelector = () => {
 		}
 
 	});
+}
+
+const selectICPackage = () => {
+	return new Promise((resolve, reject) => {
+		let outerChoices = [];
+		for (const prop in cDefs.ICPackages) {
+			outerChoices.push(prop);
+		}
+		function outer() {
+			inquirer.prompt({
+				name: "outTyp",
+				message: "Select package type (general)",
+				type: "list",
+				choices: outerChoices
+			}).then(c => {
+				c = c[Object.keys(c)[0]];
+				inner(c);
+			})
+		}
+		function inner(sel) {
+			let innerChoices = ["Back"];
+			cDefs.ICPackages[sel].forEach(p => {
+				innerChoices.push(p);
+			})
+			inquirer.prompt({
+				name: "inTyp",
+				message: "Select specific type",
+				type: "list",
+				choices: innerChoices
+			}).then(c => {
+				c = c[Object.keys(c)[0]];
+				if (c.toLowerCase().indexOf("back") > -1) {
+					outer();
+				} else {
+					return resolve(c);
+				}
+			})
+		}
+
+		outer();
+	})
 }
 
 function fixFloatRounding(number) {
