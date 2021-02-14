@@ -20,9 +20,9 @@ const inToPx = uIn => {
 //Label size defs
 const heightBoxLabel = inToPx(1.25);
 const componentLabelDims = {
-	"small": [inToPx(0.35), inToPx(0.6), 50], //height, width in px, font size
-	"medium": [inToPx(0.4), inToPx(1.32), 60],
-	"large": [inToPx(1.4), inToPx(1.32), 90] //NOT TESTED YET
+	"small": [inToPx(0.35), inToPx(0.6), 10, 50], //height, width in px, max text len, font size
+	"medium": [inToPx(0.4), inToPx(1.32), 15, 60],
+	"large": [inToPx(1.4), inToPx(1.32), 15] //NOT TESTED YET
 }
 
 let writeCanvas = (canvas, imgName, dir) => { //will overwrite any file already there
@@ -177,9 +177,9 @@ const exportComponentsDynamic = (list, boxes, dir, fPrefix) => {
 
 					canvasRoundRect(ctx, x, y, cDim[1], cDim[0], 10, false, true);
 					
-					let value = component.value.substring(0, 10).trim();				
+					let value = component.value.substring(0, cDim[2]).trim(); //cut text length down to max allowed by size			
 
-					let maxSize = cDim[2];
+					let maxSize = cDim[3]; //max font size
 					let fontSize = 25; //Starting font size
 					while (ctx.measureText(value).width < cDim[1]-15 && fontSize <= maxSize) {
 						ctx.font = "bold "+fontSize+"px Helvetica";

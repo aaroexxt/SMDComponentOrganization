@@ -37,8 +37,10 @@ const assignComponents = (store) => {
 				console.log("Boxes available: "+availableBoxes.length);
 
 				let availBoxTitles = [];
+				let boxUUIDs = [];
 				for (let i=0; i<availableBoxes.length; i++) {
 					availBoxTitles.push("Name: '"+store.boxes[availableBoxes[i][0]].title+"', freeSpace="+availableBoxes[i][1]);
+					boxUUIDs.push(store.boxes[availableBoxes[i][0]].uuid);
 				}
 
 				inquirer.prompt({
@@ -48,9 +50,11 @@ const assignComponents = (store) => {
 					choices: availBoxTitles
 				}).then(bSel => {
 					bSel = bSel[Object.keys(bSel)[0]];
+					let selIdx = availBoxTitles.indexOf(bSel);
+
 					let bIdx = 0; //global store box id
 					for (let i=0; i<store.boxes.length; i++) {
-						if (bSel.indexOf(store.boxes[i].title) > -1) {
+						if (boxUUIDs[selIdx] == store.boxes[i].uuid) {
 							bIdx = i;
 							break;
 						}
