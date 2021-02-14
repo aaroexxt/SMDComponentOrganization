@@ -21,7 +21,7 @@ const inToPx = uIn => {
 const heightBoxLabel = inToPx(1.25);
 const componentLabelDims = {
 	"small": [inToPx(0.35), inToPx(0.6), 50], //height, width in px, font size
-	"medium": [inToPx(0.4), inToPx(1.32), 60], //NOT TESTED YET
+	"medium": [inToPx(0.4), inToPx(1.32), 60],
 	"large": [inToPx(1.4), inToPx(1.32), 90] //NOT TESTED YET
 }
 
