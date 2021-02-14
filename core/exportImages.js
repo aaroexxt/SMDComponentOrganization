@@ -7,11 +7,13 @@ const cDefs = require("./componentDefinitions.js");
 
 //constants
 const canvasWidth = 4; //in
-const canvasHeight = 5.75; //in
+const canvasPrintableHeight = 6; //in
+const canvasHeight = 6.5; //in
 
 const ppi = 300;
 const canvasWidthPx = canvasWidth*ppi;
-const canvasHeightPx = canvasHeight*ppi;
+const canvasHeightPx = canvasPrintableHeight*ppi;
+const canvasActualHeightPx = canvasHeight*ppi;
 
 const inToPx = uIn => {
 	return uIn*ppi;
@@ -22,7 +24,7 @@ const heightBoxLabel = inToPx(1.25);
 const componentLabelDims = {
 	"small": [inToPx(0.35), inToPx(0.6), 10, 50], //height, width in px, max text len, font size
 	"medium": [inToPx(0.4), inToPx(1.32), 15, 60],
-	"large": [inToPx(1.4), inToPx(1.32), 15] //NOT TESTED YET
+	"large": [inToPx(1.3), inToPx(1.32), 15, 75]
 }
 
 let writeCanvas = (canvas, imgName, dir) => { //will overwrite any file already there
@@ -31,12 +33,12 @@ let writeCanvas = (canvas, imgName, dir) => { //will overwrite any file already 
 }
 
 let initBasicCanvas = () => {
-	let canvas = createCanvas(canvasWidthPx, canvasHeightPx);
+	let canvas = createCanvas(canvasWidthPx, canvasActualHeightPx);
 	let ctx = canvas.getContext('2d');
 
 	ctx.fillStyle = "#fff";
 	ctx.textBaseline = 'top';
-	ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
+	ctx.fillRect(0, 0, canvasWidthPx, canvasActualHeightPx);
 
 	return {canvas: canvas, ctx: ctx};
 }
@@ -192,7 +194,7 @@ const exportComponentsDynamic = (list, boxes, dir, fPrefix) => {
 					let code = ("B"+component.boxNum+"-"+"S"+component.sectionNum+"-"+component.sectionRow+"-"+component.sectionCol).trim();
 					ctx.font = "25px Helvetica";
 					const codeWidth = ctx.measureText(code).width;
-					ctx.fillText(code, ((cDim[1]-codeWidth)/2)+x, y+inToPx(0.225));
+					ctx.fillText(code, ((cDim[1]-codeWidth)/2)+x, y+cDim[0]-inToPx(0.125));
 
 					x+=cDim[1]+inToPx(0.025); //increment x
 					idx++;
