@@ -450,9 +450,9 @@ const afterMain = () => {
 					})
 				});
 			}
-		} else if (choice == mChoices[7]) {
-			BOMMenu();
 		} else if (choice == mChoices[8]) {
+			BOMMenu();
+		} else if (choice == mChoices[9]) {
 			let c = ["Quit", "Don't Quit"]
 			inquirer.prompt({
 				"message": "Are you sure you want to exit?",
